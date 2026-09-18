@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { LockKeyhole, Moon, Sparkles, Sun } from 'lucide-react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { BrandVisual } from '../components/BrandVisual.js';
-import { useBranding } from '../lib/branding.js';
+import { brandingLogoForTheme, useBranding } from '../lib/branding.js';
 import { applyTheme, readTheme, type AppTheme } from '../lib/theme.js';
 import { useAuth } from '../store/auth.js';
 
@@ -48,7 +48,7 @@ export function LoginPage() {
       <span>{theme === 'dark' ? 'Day mode' : 'Night mode'}</span>
     </button>
     <section className="login-panel">
-      <div className="login-brand"><BrandVisual src={branding.logo_url} label={branding.site_title} /><span>{branding.site_title}</span></div>
+      <div className="login-brand"><BrandVisual src={brandingLogoForTheme(branding, theme)} label={branding.site_title} /><span>{branding.site_title}</span></div>
       <div className="login-copy"><p className="eyebrow">{branding.site_subtitle.toUpperCase()}</p><h1>Run your workday from one clear place.</h1><p>Projects, people, payments and communication — preserved from the legacy CRM and rebuilt for today.</p><div className="login-feature"><Sparkles size={17} /> Secure modern workspace</div></div>
     </section>
     <section className="login-form-wrap">
