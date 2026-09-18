@@ -87,6 +87,7 @@ export function App() {
       <Route path="/payroll/slips/:slipId" element={<SalarySlipPage />} />
       <Route path="/archive" element={<ArchivePage />} />
       <Route path="/settings/branding" element={<BrandingSettingsPage />} />
+      <Route path="/settings/site" element={<BrandingSettingsPage />} />
       <Route path="/admin/backups" element={<BackupRestorePage />} />
       <Route path="/admin/clara" element={<ClaraControlCentrePage />} />
       <Route path="/data/:resourceId/:recordId" element={<RecordDetailPage />} />
