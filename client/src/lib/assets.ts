@@ -22,6 +22,19 @@ export function billingProfileAssetValue(fields: Record<string, unknown>, asset:
   return first(fields.qr_code_secondary_url, fields.qr_secondary_url, fields.qr_code_secondary, fields.qr_secondary, fields.qrcode_secondary);
 }
 
+/** Secondary QR artwork is previewable on the profile, but is opt-in for invoices and print/PDF output. */
+export function billingProfileSecondaryQrEnabled(fields: Record<string, unknown>): boolean {
+  const value = first(
+    fields.qr_code_secondary_enabled,
+    fields.qr_secondary_enabled,
+    fields.secondary_qr_enabled,
+    fields.secondary_qr_code_enabled
+  );
+  if (value === null || value === undefined || value === '') return false;
+  if (value === true || value === 1) return true;
+  return ['1', 'true', 'yes', 'enabled', 'on'].includes(String(value).trim().toLowerCase());
+}
+
 function first(...values: unknown[]): unknown {
   return values.find((value) => value !== null && value !== undefined && String(value).trim()) ?? null;
 }
