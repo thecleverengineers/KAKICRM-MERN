@@ -68,6 +68,7 @@ recordsRouter.get('/:collection', asyncHandler(async (req, res) => {
     limit: numberQuery(req.query.limit, 25),
     search: stringQuery(req.query.search),
     searchFields: csvQuery(req.query.searchFields),
+    searchMode: req.query.searchMode === 'any' ? 'any' : 'all',
     sort: stringQuery(req.query.sort),
     order: req.query.order === 'asc' ? 'asc' : 'desc',
     filters,
