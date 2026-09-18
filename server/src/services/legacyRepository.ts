@@ -14,6 +14,7 @@ export interface ListOptions {
   limit?: number;
   search?: string;
   searchFields?: string[];
+  searchMode?: 'all' | 'any';
   sort?: string;
   order?: 'asc' | 'desc';
   filters?: Record<string, string | number | boolean | null>;
@@ -64,7 +65,13 @@ export async function createLegacyRecord(
   const legacyId = suppliedLegacyId ?? numeric(fields.id) ?? (await nextLegacyId(model));
   const raw = { ...fields, id: fields.id ?? legacyId };
   const record = await model.create({ legacyId, raw });
-  return record.toObject() as LegacyRecord;
+  const saved = record.toObject() as LegacyRecord;
+  if (collection === 'notifications') {
+    void import('./webPush.js').then(({ sendWebPushForNotification }) => sendWebPushForNotification(raw)).catch((error) => {
+      console.warn('[KAKI CRM] Unable to queue browser push notification.', error);
+    });
+  }
+  return saved;
 }
 
 export async function upsertLegacyRecord(
@@ -188,9 +195,17 @@ function buildQuery(options: ListOptions): FilterQuery<LegacyRecord> {
   const clauses: FilterQuery<LegacyRecord>[] = [];
 
   if (options.search?.trim()) {
-    const expression = new RegExp(escapeRegex(options.search.trim()), 'i');
     const fields = (options.searchFields?.filter(normalizeField) ?? ['name', 'title', 'invoice_no', 'email', 'status']);
-    clauses.push({ $or: fields.map((field) => ({ [`raw.${field}`]: expression })) });
+    const terms = tokenizeSearch(options.search.trim());
+    const termClauses = terms.map((term) => {
+      const fieldMatch = term.match(/^([a-zA-Z][a-zA-Z0-9_]*):(.+)$/);
+      if (fieldMatch && normalizeField(fieldMatch[1])) {
+        return { [`raw.${fieldMatch[1]}`]: new RegExp(escapeRegex(fieldMatch[2]), 'i') };
+      }
+      const expression = new RegExp(escapeRegex(term), 'i');
+      return { $or: fields.map((field) => ({ [`raw.${field}`]: expression })) };
+    });
+    if (termClauses.length) clauses.push(options.searchMode === 'any' ? { $or: termClauses } : { $and: termClauses });
   }
 
   for (const [field, value] of Object.entries(options.filters ?? {})) {
@@ -226,4 +241,9 @@ async function nextLegacyId(model: Model<LegacyRecord>): Promise<number> {
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function tokenizeSearch(value: string): string[] {
+  const terms = value.match(/"[^"\\]*(?:\\.[^"\\]*)*"|\S+/g) ?? [];
+  return terms.map((term) => term.replace(/^"|"$/g, '').trim()).filter(Boolean).slice(0, 12);
 }
