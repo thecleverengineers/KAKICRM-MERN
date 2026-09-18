@@ -6,7 +6,8 @@ import { BrandVisual } from './BrandVisual.js';
 import { ShiftStartAlertListener } from './ShiftStartAlertListener.js';
 import { ClaraVoiceAssistant } from './ClaraVoiceAssistant.js';
 import { CeoCommandPalette } from './CeoCommandPalette.js';
-import { useBranding } from '../lib/branding.js';
+import { GlobalSearch } from './GlobalSearch.js';
+import { brandingLogoForTheme, useBranding } from '../lib/branding.js';
 import { initials } from '../lib/format.js';
 import { assetUrl } from '../lib/assets.js';
 import { applyTheme, readTheme, type AppTheme } from '../lib/theme.js';
@@ -66,7 +67,7 @@ export function AppShell() {
       <CeoCommandPalette />
       <aside className={`sidebar ${open ? 'sidebar--open' : ''}${sidebarHidden ? ' sidebar--hidden' : ''}`}>
         <div className="brand-row">
-          <BrandVisual src={branding.logo_url} label={branding.site_title} />
+          <BrandVisual src={brandingLogoForTheme(branding, theme)} label={branding.site_title} />
           <div><strong>{branding.site_title}</strong><span>{branding.site_subtitle}</span></div>
           <button className="icon-button sidebar-close" onClick={() => setOpen(false)} aria-label="Close menu"><X size={18} /></button>
         </div>
@@ -94,7 +95,7 @@ export function AppShell() {
       <main className="main-content">
         <header className="topbar">
           <button className="icon-button menu-button" onClick={toggleSidebar} aria-label={sidebarHidden ? 'Show sidebar' : 'Hide sidebar'} title={sidebarHidden ? 'Show sidebar' : 'Hide sidebar'}>{sidebarHidden ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}</button>
-          <div className="topbar-spacer" />
+          <GlobalSearch /><div className="topbar-spacer" />
           <button className="icon-button theme-toggle" aria-label={`Switch to ${theme === 'dark' ? 'day' : 'night'} mode`} title={`Switch to ${theme === 'dark' ? 'day' : 'night'} mode`} onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}>
             {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
           </button>
