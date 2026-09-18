@@ -641,6 +641,13 @@ a { color: inherit; text-decoration: none; }
 /* Invoice settlement controls: keep payments and discounts easy to audit and
    edit without crowding the printable document. */
 .invoice-actions-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.invoice-billing-profile-card { margin-top: 20px; }
+.invoice-profile-switcher { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto; gap: 14px; align-items: end; }
+.invoice-profile-switcher__details { min-height: 42px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-muted); }
+.invoice-profile-switcher__details strong, .invoice-profile-switcher__details span { display: block; }
+.invoice-profile-switcher__details strong { color: var(--text-strong); font-size: .78rem; }
+.invoice-profile-switcher__details span { margin-top: 4px; color: var(--text-muted); font-size: .69rem; line-height: 1.35; }
+.invoice-profile-switcher .form-success, .invoice-profile-switcher .form-error { grid-column: 1 / -1; margin: 0; }
 .invoice-discount-card { display: flex; flex-direction: column; }
 .invoice-discount-summary { min-height: 68px; padding: 12px 13px; margin: 0 0 13px; display: flex; flex-direction: column; justify-content: center; gap: 5px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); }
 .invoice-discount-summary strong { color: var(--text-strong); font-size: .83rem; }
@@ -665,6 +672,7 @@ a { color: inherit; text-decoration: none; }
 .invoice-template-discount > strong { font-weight: 850; }
 @media (max-width: 1180px) { .invoice-actions-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 620px) { .invoice-card-heading-action { min-height: 32px; padding: 0 8px; }.invoice-payment-row { align-items: flex-start; }.invoice-payment-row small { white-space: normal; }.invoice-card-actions .button { flex-basis: 100%; } }
+@media (max-width: 760px) { .invoice-profile-switcher { grid-template-columns: 1fr; }.invoice-profile-switcher .button { width: 100%; } }
 @media print { .invoice-template-discount > span, .invoice-template-discount > strong { color: #000000 !important; } }
 
 /* Full-page A4 PDF. The invoice itself owns the entire paper canvas; its
