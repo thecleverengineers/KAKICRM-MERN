@@ -1,11 +1,28 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { findLegacyRecord, listLegacyRecords, updateLegacyRecord } from '../services/legacyRepository.js';
+import { removeBrowserPushSubscription, saveBrowserPushSubscription, webPushStatus, type BrowserPushSubscription } from '../services/webPush.js';
 import { toPublicRecord } from '../db/legacy.js';
 import { asyncHandler, HttpError } from '../utils/http.js';
 
 export const notificationsRouter = Router();
 notificationsRouter.use(requireAuth);
+
+notificationsRouter.get('/push/status', asyncHandler(async (_req, res) => {
+  res.json({ data: webPushStatus() });
+}));
+
+notificationsRouter.post('/push/subscription', asyncHandler(async (req, res) => {
+  await saveBrowserPushSubscription(req.auth!.legacyId, readSubscription(req.body));
+  res.status(201).json({ data: { subscribed: true } });
+}));
+
+notificationsRouter.delete('/push/subscription', asyncHandler(async (req, res) => {
+  const endpoint = String(req.body?.endpoint ?? '').trim();
+  if (!endpoint || endpoint.length > 4_000) throw new HttpError(400, 'A valid browser push endpoint is required.');
+  await removeBrowserPushSubscription(req.auth!.legacyId, endpoint);
+  res.status(204).send();
+}));
 
 notificationsRouter.get('/', asyncHandler(async (req, res) => {
   const result = await listLegacyRecords('notifications', {
@@ -49,4 +66,16 @@ function nowIst(): string {
   const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const time = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(new Date());
   return `${date} ${time}`;
+}
+
+function readSubscription(value: unknown): BrowserPushSubscription {
+  const body = value as { endpoint?: unknown; expirationTime?: unknown; keys?: { p256dh?: unknown; auth?: unknown } };
+  const endpoint = String(body?.endpoint ?? '').trim();
+  const p256dh = String(body?.keys?.p256dh ?? '').trim();
+  const auth = String(body?.keys?.auth ?? '').trim();
+  if (!/^https:\/\//i.test(endpoint) || endpoint.length > 4_000 || !p256dh || !auth) {
+    throw new HttpError(400, 'Invalid browser push subscription.');
+  }
+  const expiration = Number(body.expirationTime);
+  return { endpoint, expirationTime: Number.isFinite(expiration) ? expiration : null, keys: { p256dh, auth } };
 }
