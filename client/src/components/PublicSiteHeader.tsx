@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { BrandVisual } from './BrandVisual.js';
 import { assetUrl } from '../lib/assets.js';
-import { useBranding } from '../lib/branding.js';
+import { brandingLogoForTheme, useBranding } from '../lib/branding.js';
 import { applyTheme, readTheme, type AppTheme } from '../lib/theme.js';
 import { useAuth } from '../store/auth.js';
 
@@ -18,7 +18,7 @@ export function PublicSiteHeader({ active }: { active?: 'home' | 'privacy' }) {
 
   return <header className="public-nav">
     <Link className="public-brand" to="/" aria-label={`${branding.site_title} home`}>
-      <BrandVisual src={assetUrl(branding.logo_url)} label={branding.site_title} className="public-brand-mark" />
+      <BrandVisual src={assetUrl(brandingLogoForTheme(branding, theme))} label={branding.site_title} className="public-brand-mark" />
       <span><strong>{branding.site_title}</strong><small>{branding.site_subtitle}</small></span>
     </Link>
     <nav className="public-nav-links" aria-label="Public navigation">
@@ -37,6 +37,7 @@ export function PublicSiteFooter() {
   return <footer className="public-footer">
     <div><strong>{branding.site_title}</strong><span>{branding.site_subtitle} for connected teams.</span></div>
     <div className="public-footer-links"><Link to="/privacy">Privacy policy</Link><Link to="/login">Sign in</Link></div>
-    <small>© {new Date().getFullYear()} M/s Chishikaki Creative Solutions (OPC) Private Limited.</small>
+    <small>© {new Date().getFullYear()} {branding.legal_company_name}.</small>
+    {branding.company_address && <small>{branding.company_address}</small>}
   </footer>;
 }
