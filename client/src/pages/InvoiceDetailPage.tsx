@@ -1,11 +1,11 @@
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, BadgePercent, FileText, Pencil, Plus, Printer, Save, Trash2, X } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ErrorState, LoadingState } from '../components/LoadingState.js';
 import { BrandVisual } from '../components/BrandVisual.js';
 import { PageHeader } from '../components/PageHeader.js';
-import { api, type PublicRecord } from '../lib/api.js';
+import { api, type Paginated, type PublicRecord } from '../lib/api.js';
 import { date, displayValue, money } from '../lib/format.js';
 import { useBranding } from '../lib/branding.js';
 import { billingProfileSecondaryQrEnabled } from '../lib/assets.js';
@@ -59,6 +59,7 @@ export function InvoiceDetailPage() {
   const canManage = hasPermission('billing.manage');
   const canManageSettlement = canManage || isAdminOrHrRole(user?.role);
   const canManageNote = isInvoiceNoteManagerRole(user?.role);
+  const canChangeBillingProfile = isAdminOrHrRole(user?.role) || isCeoRole(user?.role);
   const invoiceNote = text(invoice.data.fields.notes).trim();
   const hasInvoiceNote = Boolean(invoiceNote);
   const billingFields = invoice.billingProfile?.fields ?? {};
@@ -177,6 +178,7 @@ export function InvoiceDetailPage() {
         <section className={`invoice-template-signature${profileSignature ? ' invoice-template-signature--signed' : ''}`}><div><strong>Authority</strong>{profileSignature ? <img className="invoice-template-signature-image" src={profileSignature} alt={`${issuer} authority signature`} /> : <div className="invoice-signature-line" />}</div></section>
       </div>
     </article>
+    {canChangeBillingProfile && <InvoiceBillingProfileSwitcher invoiceId={invoiceId ?? ''} invoice={invoice.data} currentProfile={invoice.billingProfile} onSaved={refresh} />}
     {(canManage || canManageSettlement || canManageNote) && <section className="invoice-actions-grid">
       {canManage && <article className="content-card"><div className="card-heading"><div><p className="eyebrow">ADD LINE ITEM</p><h2>Invoice items</h2></div><Plus size={18} /></div><p className="muted-copy">Add a complete item with description, quantity, unit and rate.</p><button className="button" type="button" onClick={() => setAddingItem(true)}><Plus size={16} /> Add invoice item</button></article>}
       {canManageSettlement && <article className="content-card invoice-discount-card"><div className="card-heading"><div><p className="eyebrow">INVOICE DISCOUNT</p><h2>Discount</h2></div><BadgePercent size={18} /></div><div className="invoice-discount-summary"><strong>{hasDiscount ? discount.label : 'No discount applied'}</strong><span>{hasDiscount ? `${money(discount.amount)} will be deducted before GST.` : 'Apply a percentage or flat amount to this client invoice.'}</span></div><div className="invoice-card-actions"><button className="button" type="button" onClick={() => setEditingDiscount(true)}><Pencil size={16} /> {hasDiscount ? 'Edit discount' : 'Add discount'}</button>{hasDiscount && <button className="button button--secondary invoice-remove-button" type="button" onClick={() => { setDiscountDeleteError(null); setDeletingDiscount(true); }}><Trash2 size={16} /> Remove</button>}</div></article>}
@@ -194,6 +196,46 @@ export function InvoiceDetailPage() {
     {editingNote && <InvoiceNoteDialog invoiceId={invoiceId ?? ''} note={invoiceNote} onClose={() => setEditingNote(false)} onSaved={async () => { setEditingNote(false); await refresh(); }} />}
     {deletingNote && <DeleteInvoiceNoteDialog deleting={noteDeleting} error={noteDeleteError} onClose={() => { if (!noteDeleting) setDeletingNote(false); }} onConfirm={() => void deleteNote()} />}
   </>;
+}
+
+function InvoiceBillingProfileSwitcher({ invoiceId, invoice, currentProfile, onSaved }: { invoiceId: string; invoice: PublicRecord; currentProfile: PublicRecord | null; onSaved: () => Promise<void> }) {
+  const profilesQuery = useQuery({ queryKey: ['invoice-billing-profiles'], queryFn: () => api<Paginated<PublicRecord>>('/records/billing_profiles?limit=100') });
+  const currentId = String(invoice.fields.billing_profile_id ?? currentProfile?.legacyId ?? '');
+  const [selectedId, setSelectedId] = useState(currentId);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedId(currentId);
+  }, [currentId]);
+
+  const selectedProfile = profilesQuery.data?.data.find((profile) => String(profile.legacyId) === selectedId);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedId) {
+      setError('Select a billing profile.');
+      return;
+    }
+    if (selectedId === currentId) {
+      setMessage('This invoice is already using the selected billing profile.');
+      return;
+    }
+    setSaving(true);
+    setMessage(null);
+    setError(null);
+    try {
+      await api(`/billing/invoices/${invoiceId}/billing-profile`, { method: 'PATCH', body: JSON.stringify({ billing_profile_id: Number(selectedId) }) });
+      await onSaved();
+      setMessage('Billing profile changed for this invoice. Existing billing profiles and invoice amounts were not modified.');
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : 'Could not change the invoice billing profile.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <article className="content-card invoice-billing-profile-card"><div className="card-heading"><div><p className="eyebrow">INVOICE ISSUER</p><h2>Change billing profile</h2></div><FileText size={18} /></div><p className="muted-copy">Change only the company profile used by this invoice. The existing billing profile configuration, logo, signature, QR settings, GST and bank details remain unchanged.</p>{profilesQuery.isPending ? <p className="muted-copy">Loading billing profiles…</p> : profilesQuery.isError ? <p className="form-error">Could not load billing profiles. Please retry the invoice page.</p> : <form className="invoice-profile-switcher" onSubmit={(event) => void submit(event)}><label className="field"><span>Billing profile</span><select value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setMessage(null); setError(null); }}><option value="">Select billing profile…</option>{profilesQuery.data.data.map((profile) => <option key={profile.id} value={profile.legacyId ?? ''}>{companyProfileName(profile)}</option>)}</select></label><div className="invoice-profile-switcher__details"><strong>{selectedProfile ? companyProfileName(selectedProfile) : 'No profile selected'}</strong><span>{selectedProfile ? 'This profile will be used for the invoice preview and printed/PDF output.' : 'Select an active profile to update this invoice.'}</span></div><button className="button" type="submit" disabled={saving || !selectedId}>{saving ? 'Changing…' : 'Change profile'}</button>{message && <p className="form-success">{message}</p>}{error && <p className="form-error">{error}</p>}</form>}</article>;
 }
 
 function InvoiceNoteDialog({ invoiceId, note, onClose, onSaved }: { invoiceId: string; note: string; onClose: () => void; onSaved: () => Promise<void> }) {
@@ -387,6 +429,11 @@ function DeleteInvoiceItemDialog({ item, deleting, error, onClose, onConfirm }: 
 function text(value: unknown, fallback = ''): string {
   if (value === null || value === undefined || value === '') return fallback;
   return String(value);
+}
+
+function companyProfileName(profile: PublicRecord): string {
+  const fields = profile.fields;
+  return String(fields.legal_name || fields.business_name || fields.brand_name || fields.code || `Billing profile #${profile.legacyId}`);
 }
 
 function wholeQuantityText(value: unknown): string {
