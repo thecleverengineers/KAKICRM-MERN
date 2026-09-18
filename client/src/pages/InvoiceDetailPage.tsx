@@ -8,6 +8,7 @@ import { PageHeader } from '../components/PageHeader.js';
 import { api, type PublicRecord } from '../lib/api.js';
 import { date, displayValue, money } from '../lib/format.js';
 import { useBranding } from '../lib/branding.js';
+import { billingProfileSecondaryQrEnabled } from '../lib/assets.js';
 import { isCeoRole } from '../lib/ceo.js';
 import { CUSTOM_INVOICE_UNIT, INVOICE_UNITS, isPresetInvoiceUnit, resolvedUnit, unitSelection } from '../lib/invoiceUnits.js';
 import { useAuth } from '../store/auth.js';
@@ -70,6 +71,7 @@ export function InvoiceDetailPage() {
   const profileSignature = profileAssetUrl(firstText(billingFields.signature_url, billingFields.authority_signature_url, billingFields.authorised_signature_url, billingFields.signature_file, billingFields.signature));
   const profileQrPrimary = profileAssetUrl(firstText(billingFields.qr_code_primary_url, billingFields.qr_primary_url, billingFields.qr_code_primary, billingFields.qr_primary, billingFields.qrcode_primary));
   const profileQrSecondary = profileAssetUrl(firstText(billingFields.qr_code_secondary_url, billingFields.qr_secondary_url, billingFields.qr_code_secondary, billingFields.qr_secondary, billingFields.qrcode_secondary));
+  const showProfileQrSecondary = Boolean(profileQrSecondary) && billingProfileSecondaryQrEnabled(billingFields);
   const invoiceLogo = hasSelectedCompanyProfile ? profileLogo || null : branding.invoice_logo_url ?? branding.logo_url;
   const invoiceStyle = { '--invoice-accent': branding.invoice_accent } as CSSProperties;
   const spacerRows = Math.max(0, 10 - Math.max(invoice.items.length, 1));
@@ -169,7 +171,7 @@ export function InvoiceDetailPage() {
           </tbody>
         </table>
         <section className="invoice-template-settlement">
-          <div className="invoice-template-payment"><h3>Payment info:</h3><p><strong>Account #:</strong> {accountNumber || 'Available on request'}</p><p><strong>A/C Name:</strong> {issuer}</p>{bankName && <p><strong>Bank details:</strong> {bankName}</p>}{bankIfsc && <p><strong>IFSC:</strong> {bankIfsc}</p>}{showIssuerGstin && <p><strong>GSTIN:</strong> {issuerGstin}</p>}{hasInvoiceNote && <div className="invoice-template-note-block"><strong>Invoice note</strong><p>{invoiceNote}</p></div>}{(profileQrPrimary || profileQrSecondary) && <div className="invoice-template-qr-codes" aria-label="Payment QR codes">{profileQrPrimary && <div className="invoice-template-qr-code"><img src={profileQrPrimary} alt="QR Code Primary" /><span>QR Code Primary</span></div>}{profileQrSecondary && <div className="invoice-template-qr-code"><img src={profileQrSecondary} alt="QR Code Secondary" /><span>QR Code Secondary</span></div>}</div>}</div>
+          <div className="invoice-template-payment"><h3>Payment info:</h3><p><strong>Account #:</strong> {accountNumber || 'Available on request'}</p><p><strong>A/C Name:</strong> {issuer}</p>{bankName && <p><strong>Bank details:</strong> {bankName}</p>}{bankIfsc && <p><strong>IFSC:</strong> {bankIfsc}</p>}{showIssuerGstin && <p><strong>GSTIN:</strong> {issuerGstin}</p>}{hasInvoiceNote && <div className="invoice-template-note-block"><strong>Invoice note</strong><p>{invoiceNote}</p></div>}{(profileQrPrimary || showProfileQrSecondary) && <div className="invoice-template-qr-codes" aria-label="Payment QR codes">{profileQrPrimary && <div className="invoice-template-qr-code"><img src={profileQrPrimary} alt="QR Code Primary" /><span>QR Code Primary</span></div>}{showProfileQrSecondary && <div className="invoice-template-qr-code"><img src={profileQrSecondary ?? ''} alt="QR Code Secondary" /><span>QR Code Secondary</span></div>}</div>}</div>
           <div className="invoice-template-totals"><div><span>Sub total</span><strong>{money(invoice.data.fields.subtotal)}</strong></div>{hasDiscount && <div className="invoice-template-discount"><span>Discount</span><strong>−{money(discount.amount)}</strong></div>}<div><span>Tax</span><strong>{money(invoice.data.fields.gst_amount)}</strong></div><div className="invoice-template-total"><span>Total</span><strong>{money(invoice.data.fields.total_amount)}</strong></div><p><span>Paid {money(invoice.data.fields.paid_amount)}</span><strong>Balance {money(invoice.data.fields.balance_amount)}</strong></p></div>
         </section>
         <section className={`invoice-template-signature${profileSignature ? ' invoice-template-signature--signed' : ''}`}><div><strong>Authority</strong>{profileSignature ? <img className="invoice-template-signature-image" src={profileSignature} alt={`${issuer} authority signature`} /> : <div className="invoice-signature-line" />}</div></section>
