@@ -67,6 +67,10 @@ const invoiceNoteSchema = z.object({
   note: z.string().trim().min(1, 'Invoice note cannot be empty.').max(10_000)
 });
 
+const billingProfileChangeSchema = z.object({
+  billing_profile_id: z.coerce.number().int().positive()
+});
+
 export const billingRouter = Router();
 billingRouter.use(requireAuth);
 
@@ -268,6 +272,33 @@ billingRouter.post('/invoices', requirePermission('billing.manage'), asyncHandle
 
 billingRouter.get('/invoices/:invoiceId', requireInvoiceView, asyncHandler(async (req, res) => {
   res.json(await invoiceDetail(invoiceId(req.params.invoiceId)));
+}));
+
+// Changing the issuer on an existing invoice only updates that invoice's
+// reference. The selected billing profile itself is never edited, so its
+// logo, signature, QR settings, GST and bank configuration remain intact.
+billingRouter.patch('/invoices/:invoiceId/billing-profile', requireInvoiceBillingProfileChange, asyncHandler(async (req, res) => {
+  const id = invoiceId(req.params.invoiceId);
+  const input = billingProfileChangeSchema.parse(req.body);
+  const invoice = await findLegacyRecord('invoices', id);
+  if (!invoice) throw new HttpError(404, 'Invoice not found.');
+  const profile = await findLegacyRecord('billing_profiles', input.billing_profile_id);
+  if (!profile) throw new HttpError(404, 'Select an active billing profile.');
+  const currentProfileId = Number(invoice.raw.billing_profile_id);
+  if (currentProfileId === input.billing_profile_id) {
+    res.json(await invoiceDetail(id));
+    return;
+  }
+  const updated = await updateLegacyRecord('invoices', id, {
+    billing_profile_id: input.billing_profile_id,
+    billing_profile_previous_id: Number.isSafeInteger(currentProfileId) && currentProfileId > 0 ? currentProfileId : null,
+    billing_profile_changed_by: req.auth!.legacyId,
+    billing_profile_changed_at: nowIst(),
+    updated_by: req.auth!.legacyId,
+    updated_at: nowIst()
+  });
+  if (!updated) throw new HttpError(404, 'Invoice not found.');
+  res.json(await invoiceDetail(id));
 }));
 
 billingRouter.patch('/invoices/:invoiceId/note', requireInvoiceNoteManage, asyncHandler(async (req, res) => {
@@ -767,6 +798,18 @@ function requireInvoiceSettlementManage(req: Request, res: Response, next: NextF
   }
   if (!canManageInvoiceSettlement(req.auth)) {
     res.status(403).json({ error: 'Only administrators or HR users can manage invoice payments and discounts.' });
+    return;
+  }
+  next();
+}
+
+function requireInvoiceBillingProfileChange(req: Request, res: Response, next: NextFunction): void {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Authentication is required.' });
+    return;
+  }
+  if (!isAdminOrHrRole(req.auth) && !isCeoRole(req.auth)) {
+    res.status(403).json({ error: 'Only Admin, HR, or CEO users can change an invoice billing profile.' });
     return;
   }
   next();
