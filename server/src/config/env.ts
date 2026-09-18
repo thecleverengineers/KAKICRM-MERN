@@ -40,6 +40,12 @@ const schema = z.object({
   // credentials. When omitted, the JWT access secret is used as a backwards-
   // compatible fallback. Keep this value stable after credentials are saved.
   SETTINGS_ENCRYPTION_SECRET: optionalEnvText,
+  // Browser push notification credentials. Keep the private key only in the
+  // Render environment; the public key is safe to expose to authenticated
+  // clients when they opt in.
+  PUSH_VAPID_PUBLIC_KEY: optionalEnvText,
+  PUSH_VAPID_PRIVATE_KEY: optionalEnvText,
+  PUSH_VAPID_SUBJECT: z.string().url().default('mailto:admin@kakicrm.com'),
   FAST2SMS_WHATSAPP_API_URL: z.string().url().default('https://www.fast2sms.com/dev/whatsapp'),
   FAST2SMS_WHATSAPP_TEMPLATE_NAME: z.string().trim().default('my_task'),
   FAST2SMS_WHATSAPP_MESSAGE_ID: z.string().trim().regex(/^\d+$/).default('30840'),
