@@ -35,6 +35,7 @@ import { tasksRouter } from './routes/tasks.js';
 import { teamsRouter } from './routes/teams.js';
 import { uploadsRouter } from './routes/uploads.js';
 import { webhooksRouter } from './routes/webhooks.js';
+import { mirrorLocalUploadsToGridFs } from './services/storage.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -105,6 +106,9 @@ async function start(): Promise<void> {
   configureRealtime(io);
   httpServer.listen(env.PORT, env.HOST, () => {
     console.log(`KAKI CRM API listening on http://${env.HOST}:${env.PORT}`);
+    void mirrorLocalUploadsToGridFs()
+      .then(({ copied, skipped }) => console.log(`Media durability check complete: ${copied} copied to Atlas, ${skipped} already durable.`))
+      .catch((error: unknown) => console.error('Media durability check failed:', error));
   });
 }
 
