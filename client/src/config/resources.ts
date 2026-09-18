@@ -90,8 +90,8 @@ export const resources: ResourceConfig[] = [
   },
   {
     id: 'billing_profiles', label: 'Billing Profiles', singular: 'Billing profile', description: 'Legal entity, GST, bank account, invoice branding and payment QR codes.', icon: Landmark, permission: 'billing.view',
-    columns: ['code', 'legal_name', 'logo_file', 'signature_file', 'qr_code_primary_file', 'qr_code_secondary_file', 'phone', 'email', 'gst_default_enabled', 'gstin'], fields: [
-      { key: 'code', label: 'Code', required: true }, { key: 'legal_name', label: 'Legal name / business name', required: true }, { key: 'logo_file', label: 'Company logo', kind: 'image' }, { key: 'signature_file', label: 'Authorized signatory signature', kind: 'image' }, { key: 'qr_code_primary_file', label: 'QR Code Primary', kind: 'image' }, { key: 'qr_code_secondary_file', label: 'QR Code Secondary', kind: 'image' },
+    columns: ['code', 'legal_name', 'logo_file', 'signature_file', 'qr_code_primary_file', 'qr_code_secondary_file', 'qr_code_secondary_enabled', 'phone', 'email', 'gst_default_enabled', 'gstin'], fields: [
+      { key: 'code', label: 'Code', required: true }, { key: 'legal_name', label: 'Legal name / business name', required: true }, { key: 'logo_file', label: 'Company logo', kind: 'image' }, { key: 'signature_file', label: 'Authorized signatory signature', kind: 'image' }, { key: 'qr_code_primary_file', label: 'QR Code Primary', kind: 'image' }, { key: 'qr_code_secondary_file', label: 'QR Code Secondary', kind: 'image' }, { key: 'qr_code_secondary_enabled', label: 'Enable QR Code Secondary on invoices and PDFs', kind: 'boolean' },
       { key: 'address', label: 'Business address', kind: 'textarea' }, { key: 'phone', label: 'Phone' }, { key: 'email', label: 'Email', kind: 'email' }, { key: 'website', label: 'Website' },
       { key: 'gst_default_enabled', label: 'GST enabled', kind: 'boolean' }, { key: 'gstin', label: 'GSTIN' }, { key: 'bank_name', label: 'Bank name' }, { key: 'bank_account_number', label: 'Account number' }, { key: 'bank_ifsc_code', label: 'IFSC code' }
     ]
