@@ -27,11 +27,11 @@ function imageContentType(absolutePath: string): string {
 }
 
 async function sendPublicImage(res: Response, relativePath: string): Promise<void> {
-  const { stream, absolutePath } = await openStoredFile(relativePath);
-  res.setHeader('Content-Type', imageContentType(absolutePath));
-  res.setHeader('Content-Disposition', `inline; filename="${path.basename(absolutePath).replaceAll('"', '')}"`);
+  const stored = await openStoredFile(relativePath);
+  res.setHeader('Content-Type', stored.contentType ?? imageContentType(stored.fileName));
+  res.setHeader('Content-Disposition', `inline; filename="${stored.fileName.replaceAll('"', '')}"`);
   res.setHeader('Cache-Control', 'public, max-age=300');
-  stream.pipe(res);
+  stored.stream.pipe(res);
 }
 
 // The sign-in screen and printed invoices need to render their selected
@@ -87,7 +87,8 @@ uploadsRouter.use(requireAuth);
 
 uploadsRouter.get('/*', asyncHandler(async (req, res) => {
   const relativePath = String(req.params[0] ?? '');
-  const { stream, absolutePath } = await openStoredFile(relativePath);
-  res.setHeader('Content-Disposition', `inline; filename=\"${path.basename(absolutePath).replaceAll('"', '')}\"`);
-  stream.pipe(res);
+  const stored = await openStoredFile(relativePath);
+  res.setHeader('Content-Type', stored.contentType ?? imageContentType(stored.fileName));
+  res.setHeader('Content-Disposition', `inline; filename="${stored.fileName.replaceAll('"', '')}"`);
+  stored.stream.pipe(res);
 }));
