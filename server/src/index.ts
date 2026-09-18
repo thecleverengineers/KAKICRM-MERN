@@ -30,6 +30,7 @@ import { recordsRouter } from './routes/records.js';
 import { recruitmentRouter } from './routes/recruitment.js';
 import { remoteWorkRouter } from './routes/remoteWork.js';
 import { settingsRouter } from './routes/settings.js';
+import { searchRouter } from './routes/search.js';
 import { tasksRouter } from './routes/tasks.js';
 import { teamsRouter } from './routes/teams.js';
 import { uploadsRouter } from './routes/uploads.js';
@@ -66,6 +67,7 @@ app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'kaki-cr
 app.use('/api/auth', rateLimit({ windowMs: 15 * 60_000, limit: 25, standardHeaders: 'draft-8', legacyHeaders: false }), authRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/search', searchRouter);
 app.use('/api/records', recordsRouter);
 app.use('/api/employees', employeesRouter);
 app.use('/api/tasks', tasksRouter);
