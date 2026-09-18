@@ -1,6 +1,6 @@
 import { useEffect, useState, type ChangeEvent, type CSSProperties, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ImagePlus, KeyRound, MessageCircle, Palette, RotateCcw, Save, Trash2, Upload } from 'lucide-react';
+import { Building2, ImagePlus, KeyRound, MessageCircle, Palette, RotateCcw, Save, Trash2, Upload } from 'lucide-react';
 import { BrandVisual } from '../components/BrandVisual.js';
 import { ErrorState, LoadingState } from '../components/LoadingState.js';
 import { PageHeader } from '../components/PageHeader.js';
@@ -8,7 +8,7 @@ import { api } from '../lib/api.js';
 import { defaultBranding, type Branding, useBranding } from '../lib/branding.js';
 import { useAuth } from '../store/auth.js';
 
-type BrandingFields = Pick<Branding, 'site_title' | 'site_subtitle' | 'logo_url' | 'invoice_logo_url' | 'invoice_footer' | 'invoice_accent'>;
+type BrandingFields = Pick<Branding, 'site_title' | 'site_subtitle' | 'logo_url' | 'logo_day_url' | 'logo_night_url' | 'legal_company_name' | 'company_information' | 'company_address' | 'company_phone' | 'company_email' | 'company_website' | 'invoice_logo_url' | 'invoice_footer' | 'invoice_accent'>;
 
 export function BrandingSettingsPage() {
   const { hasPermission } = useAuth();
@@ -20,7 +20,7 @@ export function BrandingSettingsPage() {
   });
   const [fields, setFields] = useState<BrandingFields>(contextBranding);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState<'app' | 'invoice' | null>(null);
+  const [uploading, setUploading] = useState<'day' | 'night' | 'invoice' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -50,7 +50,7 @@ export function BrandingSettingsPage() {
     }
   };
 
-  const uploadLogo = async (event: ChangeEvent<HTMLInputElement>, kind: 'app' | 'invoice') => {
+  const uploadLogo = async (event: ChangeEvent<HTMLInputElement>, kind: 'day' | 'night' | 'invoice') => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
@@ -64,7 +64,7 @@ export function BrandingSettingsPage() {
       const response = await api<{ data: Branding }>('/settings/branding/logo', { method: 'POST', body });
       setFields(response.data);
       queryClient.setQueryData(['branding'], response.data);
-      setSuccess(kind === 'app' ? 'Site logo uploaded.' : 'Invoice logo uploaded.');
+      setSuccess(kind === 'invoice' ? 'Invoice logo uploaded.' : `${kind === 'day' ? 'Day' : 'Night'} mode logo uploaded.`);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : 'Unable to upload the logo.');
     } finally {
@@ -79,13 +79,19 @@ export function BrandingSettingsPage() {
   };
 
   return <>
-    <PageHeader eyebrow="ADMINISTRATION" title="Branding, invoices & integrations" description="Set the organisation identity used across the workspace, printable invoices, and approved WhatsApp delivery." />
+    <PageHeader eyebrow="ADMINISTRATION" title="Site settings" description="Manage the site identity, day/night logos, legal company information, invoices, browser alerts and approved integrations." />
     <form className="branding-layout" onSubmit={(event) => void save(event)}>
       <section className="content-card branding-form-card">
-        <div className="card-heading"><div><p className="eyebrow">WORKSPACE IDENTITY</p><h2>Your visible brand</h2></div><Palette size={22} aria-hidden="true" /></div>
+        <div className="card-heading"><div><p className="eyebrow">SITE IDENTITY</p><h2>Brand and legal information</h2></div><Building2 size={22} aria-hidden="true" /></div>
         <div className="form-grid">
           <label className="field"><span>Site title *</span><input value={fields.site_title} maxLength={80} onChange={(event) => update('site_title', event.target.value)} required /></label>
           <label className="field"><span>Site subtitle</span><input value={fields.site_subtitle} maxLength={120} onChange={(event) => update('site_subtitle', event.target.value)} /></label>
+          <label className="field field--wide"><span>Legal company name *</span><input value={fields.legal_company_name} maxLength={180} onChange={(event) => update('legal_company_name', event.target.value)} required /></label>
+          <label className="field field--wide"><span>Company information</span><textarea value={fields.company_information} maxLength={2_000} rows={3} placeholder="Short legal or business description" onChange={(event) => update('company_information', event.target.value)} /></label>
+          <label className="field field--wide"><span>Company address</span><textarea value={fields.company_address} maxLength={2_000} rows={3} placeholder="Registered or operating address" onChange={(event) => update('company_address', event.target.value)} /></label>
+          <label className="field"><span>Company phone</span><input value={fields.company_phone} maxLength={80} onChange={(event) => update('company_phone', event.target.value)} /></label>
+          <label className="field"><span>Company email</span><input type="email" value={fields.company_email} maxLength={180} onChange={(event) => update('company_email', event.target.value)} /></label>
+          <label className="field field--wide"><span>Company website</span><input type="url" value={fields.company_website} maxLength={300} placeholder="https://example.com" onChange={(event) => update('company_website', event.target.value)} /></label>
           <label className="field field--wide"><span>Invoice footer</span><textarea value={fields.invoice_footer} maxLength={500} rows={3} onChange={(event) => update('invoice_footer', event.target.value)} /></label>
           <label className="field"><span>Invoice accent</span><span className="branding-colour-input"><input type="color" value={fields.invoice_accent} onChange={(event) => update('invoice_accent', event.target.value)} /><input value={fields.invoice_accent} maxLength={7} pattern="#[0-9a-fA-F]{6}" onChange={(event) => update('invoice_accent', event.target.value)} /></span></label>
         </div>
@@ -95,14 +101,14 @@ export function BrandingSettingsPage() {
       </section>
       <aside className="branding-preview-stack">
         <section className="content-card branding-preview-card">
-          <div className="card-heading"><div><p className="eyebrow">SITE LOGO</p><h2>Workspace preview</h2></div><ImagePlus size={21} aria-hidden="true" /></div>
-          <div className="branding-site-preview"><BrandVisual src={fields.logo_url} label={fields.site_title} className="branding-site-logo" /><div><strong>{fields.site_title}</strong><span>{fields.site_subtitle || 'Operations hub'}</span></div></div>
-          <label className="button button--secondary button--full file-action"><Upload size={16} /> {uploading === 'app' ? 'Uploading…' : 'Upload site logo'}<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(event) => void uploadLogo(event, 'app')} disabled={uploading !== null} /></label>
-          {fields.logo_url && <button type="button" className="text-button branding-reset-link" onClick={() => update('logo_url', null)}>Use initials instead</button>}
+          <div className="card-heading"><div><p className="eyebrow">SITE LOGOS</p><h2>Day and night mode</h2><p className="muted-copy">Upload separate compact logos; each mode falls back safely to the other.</p></div><ImagePlus size={21} aria-hidden="true" /></div>
+          <div className="branding-logo-mode-grid"><LogoModePreview label="Day mode" src={fields.logo_day_url ?? fields.logo_url} siteTitle={fields.site_title} /><LogoModePreview label="Night mode" src={fields.logo_night_url ?? fields.logo_day_url ?? fields.logo_url} siteTitle={fields.site_title} dark /></div>
+          <div className="branding-logo-actions"><label className="button button--secondary button--full file-action"><Upload size={16} /> {uploading === 'day' ? 'Uploading…' : 'Upload day logo'}<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(event) => void uploadLogo(event, 'day')} disabled={uploading !== null} /></label><label className="button button--secondary button--full file-action"><Upload size={16} /> {uploading === 'night' ? 'Uploading…' : 'Upload night logo'}<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(event) => void uploadLogo(event, 'night')} disabled={uploading !== null} /></label></div>
+          {(fields.logo_day_url || fields.logo_night_url || fields.logo_url) && <button type="button" className="text-button branding-reset-link" onClick={() => { update('logo_url', null); update('logo_day_url', null); update('logo_night_url', null); }}>Use initials instead</button>}
         </section>
         <section className="content-card branding-preview-card branding-invoice-preview-card" style={{ '--invoice-accent': fields.invoice_accent } as CSSProperties}>
           <div className="card-heading"><div><p className="eyebrow">INVOICE LOGO</p><h2>Invoice preview</h2></div><Palette size={21} aria-hidden="true" /></div>
-          <div className="branding-invoice-mini"><div className="branding-invoice-mini-head"><div className="branding-site-preview"><BrandVisual src={fields.invoice_logo_url ?? fields.logo_url} label={fields.site_title} className="branding-invoice-logo" /><strong>{fields.site_title}</strong></div><span>INVOICE</span></div><div className="branding-mini-lines"><i /><i /><i /></div><strong className="branding-mini-total">₹ 0.00</strong><small>{fields.invoice_footer || defaultBranding.invoice_footer}</small></div>
+          <div className="branding-invoice-mini"><div className="branding-invoice-mini-head"><div className="branding-site-preview"><BrandVisual src={fields.invoice_logo_url ?? fields.logo_day_url ?? fields.logo_url} label={fields.site_title} className="branding-invoice-logo" /><strong>{fields.site_title}</strong></div><span>INVOICE</span></div><div className="branding-mini-lines"><i /><i /><i /></div><strong className="branding-mini-total">₹ 0.00</strong><small>{fields.invoice_footer || defaultBranding.invoice_footer}</small></div>
           <label className="button button--secondary button--full file-action"><Upload size={16} /> {uploading === 'invoice' ? 'Uploading…' : 'Upload invoice logo'}<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(event) => void uploadLogo(event, 'invoice')} disabled={uploading !== null} /></label>
           {fields.invoice_logo_url && <button type="button" className="text-button branding-reset-link" onClick={() => update('invoice_logo_url', null)}>Use site logo on invoices</button>}
         </section>
@@ -110,6 +116,10 @@ export function BrandingSettingsPage() {
     </form>
     <Fast2SmsWhatsAppSettings />
   </>;
+}
+
+function LogoModePreview({ label, src, siteTitle, dark = false }: { label: string; src: string | null; siteTitle: string; dark?: boolean }) {
+  return <div className={`branding-logo-mode-preview${dark ? ' branding-logo-mode-preview--dark' : ''}`}><small>{label}</small><div className="branding-site-preview"><BrandVisual src={src} label={siteTitle} className="branding-site-logo" /><div><strong>{siteTitle}</strong><span>Operations hub</span></div></div></div>;
 }
 
 interface Fast2SmsWhatsAppStatus {
