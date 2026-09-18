@@ -67,6 +67,7 @@ export const LEGACY_COLLECTIONS = [
   'messenger_message_reactions',
   'messenger_participants',
   'notifications',
+  'push_subscriptions',
   'notification_import_state',
   'payments',
   'payroll_auto_logs',
