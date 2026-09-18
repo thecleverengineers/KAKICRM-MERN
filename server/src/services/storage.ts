@@ -35,11 +35,11 @@ export async function openStoredFile(relativePath: string): Promise<StoredFile> 
   // media even though its local filesystem starts empty on every deploy.
   const gridFile = await findGridFile(relativePath);
   if (gridFile) {
-    const metadata = gridFile.metadata as Record<string, unknown> | undefined;
+    const metadata = gridFile.file.metadata as Record<string, unknown> | undefined;
     return {
-      stream: getGridFsBucket().openDownloadStream(gridFile._id),
-      absolutePath: gridFile.filename,
-      fileName: path.basename(gridFile.filename),
+      stream: getGridFsBucket(gridFile.bucketName).openDownloadStream(gridFile.file._id),
+      absolutePath: gridFile.file.filename,
+      fileName: path.basename(gridFile.file.filename),
       contentType: typeof metadata?.contentType === 'string' ? metadata.contentType : undefined
     };
   }
@@ -135,7 +135,7 @@ export async function mirrorLocalUploadsToGridFs(): Promise<{ copied: number; sk
 
   for (const absolutePath of files) {
     const relativePath = path.relative(env.uploadRoot, absolutePath).split(path.sep).join('/');
-    if (!relativePath || await findGridFile(relativePath)) {
+    if (!relativePath || await findGridFile(relativePath, env.MEDIA_GRIDFS_BUCKET)) {
       skipped += 1;
       continue;
     }
@@ -151,17 +151,24 @@ export async function mirrorLocalUploadsToGridFs(): Promise<{ copied: number; sk
   return { copied, skipped };
 }
 
-function getGridFsBucket(): mongoose.mongo.GridFSBucket {
+function getGridFsBucket(bucketName = env.MEDIA_GRIDFS_BUCKET): mongoose.mongo.GridFSBucket {
   if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) {
     throw new HttpError(503, 'Durable media storage is temporarily unavailable.');
   }
-  return new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: env.MEDIA_GRIDFS_BUCKET });
+  return new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName });
 }
 
-async function findGridFile(relativePath: string): Promise<mongoose.mongo.GridFSFile | null> {
+async function findGridFile(relativePath: string, preferredBucket?: string): Promise<{ file: mongoose.mongo.GridFSFile; bucketName: string } | null> {
   if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) return null;
-  const bucket = getGridFsBucket();
-  return bucket.find({ filename: relativePath }).sort({ uploadDate: -1 }).limit(1).next();
+  const bucketNames = [preferredBucket ?? env.MEDIA_GRIDFS_BUCKET, 'uploads'].filter((value, index, values) => values.indexOf(value) === index);
+  for (const bucketName of bucketNames) {
+    const bucket = getGridFsBucket(bucketName);
+    const file = await bucket.find({
+      $or: [{ filename: relativePath }, { 'metadata.relativePath': relativePath }]
+    }).sort({ uploadDate: -1 }).limit(1).next();
+    if (file) return { file, bucketName };
+  }
+  return null;
 }
 
 async function uploadBufferToGridFs(relativePath: string, buffer: Buffer, contentType: string, originalName: string): Promise<void> {
