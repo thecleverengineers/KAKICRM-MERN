@@ -14,16 +14,35 @@ const defaultBranding = {
   site_title: 'KAKI CRM',
   site_subtitle: 'Operations hub',
   logo_url: null as string | null,
+  logo_day_url: null as string | null,
+  logo_night_url: null as string | null,
+  legal_company_name: 'M/s Chishikaki Creative Solutions (OPC) Private Limited',
+  company_information: '',
+  company_address: '',
+  company_phone: '',
+  company_email: '',
+  company_website: '',
   invoice_logo_url: null as string | null,
   invoice_footer: 'Thank you for your business.',
   invoice_accent: '#2f5ea8'
 };
 
 const logoUrlSchema = z.string().trim().max(2_000).nullable().optional();
+const companyTextSchema = z.string().trim().max(2_000).nullable().optional();
+const optionalEmailSchema = z.preprocess((value) => typeof value === 'string' && !value.trim() ? null : value, z.string().trim().email().max(180).nullable().optional());
+const optionalUrlSchema = z.preprocess((value) => typeof value === 'string' && !value.trim() ? null : value, z.string().trim().url().max(300).nullable().optional());
 const brandingSchema = z.object({
   site_title: z.string().trim().min(2).max(80).optional(),
   site_subtitle: z.string().trim().max(120).optional(),
   logo_url: logoUrlSchema,
+  logo_day_url: logoUrlSchema,
+  logo_night_url: logoUrlSchema,
+  legal_company_name: z.string().trim().min(2).max(180).optional(),
+  company_information: companyTextSchema,
+  company_address: companyTextSchema,
+  company_phone: z.string().trim().max(80).nullable().optional(),
+  company_email: optionalEmailSchema,
+  company_website: optionalUrlSchema,
   invoice_logo_url: logoUrlSchema,
   invoice_footer: z.string().trim().max(500).optional(),
   invoice_accent: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a six-digit HEX colour.').optional()
@@ -52,10 +71,15 @@ settingsRouter.post('/branding/logo', requireAuth, requireBrandingManage, upload
   if (!['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'].includes(file.mimetype)) {
     throw new HttpError(400, 'Upload a PNG, JPG, WEBP, or SVG logo.');
   }
-  const kind = z.enum(['app', 'invoice']).default('app').parse(req.body.kind);
+  const kind = z.enum(['app', 'day', 'night', 'invoice']).default('day').parse(req.body.kind);
   const saved = await persistIncomingFile(file, 'branding');
-  const field = kind === 'invoice' ? 'invoice_logo_url' : 'logo_url';
-  const data = await saveBranding({ [field]: storedAssetUrl(saved.relativePath) }, req.auth!.legacyId);
+  const logo = storedAssetUrl(saved.relativePath);
+  const input = kind === 'invoice'
+    ? { invoice_logo_url: logo }
+    : kind === 'night'
+      ? { logo_night_url: logo }
+      : { logo_url: logo, logo_day_url: logo };
+  const data = await saveBranding(input, req.auth!.legacyId);
   res.status(201).json({ data });
 }));
 
@@ -103,7 +127,7 @@ async function readBranding(): Promise<typeof defaultBranding> {
   return normalizeBranding(record?.raw);
 }
 
-async function saveBranding(input: Partial<typeof defaultBranding>, userId: number): Promise<typeof defaultBranding> {
+async function saveBranding(input: Record<string, unknown>, userId: number): Promise<typeof defaultBranding> {
   const [record] = await listRawRecords('app_settings', { 'raw.key': 'branding' }, 1);
   const current = normalizeBranding(record?.raw);
   const next = normalizeBranding({ ...current, ...input });
@@ -128,10 +152,20 @@ async function saveBranding(input: Partial<typeof defaultBranding>, userId: numb
 }
 
 function normalizeBranding(value: Record<string, unknown> | undefined): typeof defaultBranding {
+  const legacyLogo = urlOrNull(value?.logo_url);
+  const dayLogo = urlOrNull(value?.logo_day_url) ?? legacyLogo;
   return {
     site_title: nonEmpty(value?.site_title, defaultBranding.site_title, 80),
     site_subtitle: nonEmpty(value?.site_subtitle, defaultBranding.site_subtitle, 120),
-    logo_url: urlOrNull(value?.logo_url),
+    logo_url: legacyLogo ?? dayLogo,
+    logo_day_url: dayLogo,
+    logo_night_url: urlOrNull(value?.logo_night_url),
+    legal_company_name: nonEmpty(value?.legal_company_name, defaultBranding.legal_company_name, 180),
+    company_information: nullableText(value?.company_information, 2_000),
+    company_address: nullableText(value?.company_address, 2_000),
+    company_phone: nullableText(value?.company_phone, 80),
+    company_email: nullableText(value?.company_email, 180),
+    company_website: nullableText(value?.company_website, 300),
     invoice_logo_url: urlOrNull(value?.invoice_logo_url),
     invoice_footer: nonEmpty(value?.invoice_footer, defaultBranding.invoice_footer, 500),
     invoice_accent: /^#[0-9a-fA-F]{6}$/.test(String(value?.invoice_accent ?? '')) ? String(value?.invoice_accent) : defaultBranding.invoice_accent
@@ -146,6 +180,10 @@ function nonEmpty(value: unknown, fallback: string, max: number): string {
 function urlOrNull(value: unknown): string | null {
   const text = String(value ?? '').trim();
   return text && text.length <= 2_000 ? text : null;
+}
+
+function nullableText(value: unknown, max: number): string {
+  return String(value ?? '').trim().slice(0, max);
 }
 
 function nowIst(): string {
