@@ -1,15 +1,22 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { BellRing, CheckCheck } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { BellRing, CheckCheck, MonitorDown, MonitorUp } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader.js';
 import { ErrorState, LoadingState, EmptyState } from '../components/LoadingState.js';
 import { api, type Paginated, type PublicRecord } from '../lib/api.js';
 import { dateTime, displayValue } from '../lib/format.js';
 import { useNavigate } from 'react-router-dom';
+import { disableBrowserPush, enableBrowserPush, readBrowserPushSubscription, readPushStatus, supportsBrowserPush, type PushStatus } from '../lib/push.js';
 
 export function NotificationsPage() {
   const client = useQueryClient();
   const navigate = useNavigate();
   const query = useQuery({ queryKey: ['notifications'], queryFn: () => api<Paginated<PublicRecord> & { unread: number }>('/notifications?limit=100') });
+  const pushQuery = useQuery({ queryKey: ['push-status'], queryFn: readPushStatus });
+  const [pushSubscription, setPushSubscription] = useState<PushSubscription | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMessage, setPushMessage] = useState<string | null>(null);
+  useEffect(() => { void readBrowserPushSubscription().then(setPushSubscription).catch(() => setPushSubscription(null)); }, []);
   if (query.isPending) return <LoadingState label="Loading notifications…" />;
   if (query.isError) return <ErrorState message={query.error.message} onRetry={() => void query.refetch()} />;
   const markAll = async () => { await api('/notifications/mark-all-read', { method: 'POST' }); await client.invalidateQueries({ queryKey: ['notifications'] }); };
@@ -21,7 +28,21 @@ export function NotificationsPage() {
       navigate(notificationDestination(record));
     }
   };
-  return <><PageHeader eyebrow="COLLABORATION" title="Notifications" description={`${query.data.unread} unread notification${query.data.unread === 1 ? '' : 's'}.`} actions={<button className="button button--secondary" onClick={() => void markAll()}><CheckCheck size={17} /> Mark all read</button>} /><article className="content-card notification-card">{query.data.data.map((record) => <button className={`notification-row ${Number(record.fields.is_read) ? '' : 'notification-row--unread'}`} key={record.id} type="button" onClick={() => void openNotification(record)}><span className="activity-icon"><BellRing size={17} /></span><span><strong>{displayValue(record.fields.title)}</strong><p>{displayValue(record.fields.body)}</p><small>{dateTime(record.fields.created_at ?? record.createdAt)}</small></span></button>)}{!query.data.data.length && <EmptyState title="You are all caught up" detail="New alerts from tasks and workspace activity will appear here." />}</article></>;
+  const pushStatus = pushQuery.data as PushStatus | undefined;
+  const enablePush = async () => {
+    if (!pushStatus?.publicKey) return;
+    setPushBusy(true); setPushMessage(null);
+    try { await enableBrowserPush(pushStatus.publicKey); setPushSubscription(await readBrowserPushSubscription()); setPushMessage('Browser notifications are enabled for this account.'); }
+    catch (problem) { setPushMessage(problem instanceof Error ? problem.message : 'Unable to enable browser notifications.'); }
+    finally { setPushBusy(false); }
+  };
+  const disablePush = async () => {
+    setPushBusy(true); setPushMessage(null);
+    try { await disableBrowserPush(); setPushSubscription(null); setPushMessage('Browser notifications disabled on this device.'); }
+    catch (problem) { setPushMessage(problem instanceof Error ? problem.message : 'Unable to disable browser notifications.'); }
+    finally { setPushBusy(false); }
+  };
+  return <><PageHeader eyebrow="COLLABORATION" title="Notifications" description={`${query.data.unread} unread notification${query.data.unread === 1 ? '' : 's'}.`} actions={<button className="button button--secondary" onClick={() => void markAll()}><CheckCheck size={17} /> Mark all read</button>} /><section className="content-card push-settings-card"><div><p className="eyebrow">WEB PUSH</p><h2>Browser notifications</h2><p>Receive task, meeting, attendance and workspace alerts even when KAKI CRM is not the active tab.</p></div>{!supportsBrowserPush() ? <span className="push-status-copy">This browser does not support web push.</span> : !pushStatus?.configured ? <span className="push-status-copy">Push service is not configured by the administrator.</span> : pushSubscription ? <button type="button" className="button button--secondary" onClick={() => void disablePush()} disabled={pushBusy}><MonitorDown size={16} /> {pushBusy ? 'Disabling…' : 'Disable on this device'}</button> : <button type="button" className="button" onClick={() => void enablePush()} disabled={pushBusy}><MonitorUp size={16} /> {pushBusy ? 'Enabling…' : 'Enable browser alerts'}</button>}{pushMessage && <small className="push-settings-message">{pushMessage}</small>}</section><article className="content-card notification-card">{query.data.data.map((record) => <button className={`notification-row ${Number(record.fields.is_read) ? '' : 'notification-row--unread'}`} key={record.id} type="button" onClick={() => void openNotification(record)}><span className="activity-icon"><BellRing size={17} /></span><span><strong>{displayValue(record.fields.title)}</strong><p>{displayValue(record.fields.body)}</p><small>{dateTime(record.fields.created_at ?? record.createdAt)}</small></span></button>)}{!query.data.data.length && <EmptyState title="You are all caught up" detail="New alerts from tasks and workspace activity will appear here." />}</article></>;
 }
 
 function notificationDestination(record: Pick<PublicRecord, 'fields'>): string {
