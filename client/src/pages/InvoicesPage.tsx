@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileDown, LoaderCircle, Plus, Search, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DataTable } from '../components/DataTable.js';
+import { SearchAutocomplete, useDebouncedValue } from '../components/SearchAutocomplete.js';
 import { ErrorState, LoadingState } from '../components/LoadingState.js';
 import { PageHeader } from '../components/PageHeader.js';
 import { type ResourceConfig } from '../config/resources.js';
@@ -22,6 +23,8 @@ export function InvoicesPage() {
   const { hasPermission } = useAuth();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const suggestionSearch = useDebouncedValue(searchInput.trim());
   const [open, setOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportMode, setExportMode] = useState<'all' | 'filtered' | null>(null);
@@ -36,6 +39,12 @@ export function InvoicesPage() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
   const query = useQuery({ queryKey: ['invoices', page, search], queryFn: () => api<Paginated<PublicRecord>>(`/billing/invoices${queryString({ page, limit: 50, search })}`) });
+  const suggestionsQuery = useQuery({
+    queryKey: ['invoice-search-suggestions', suggestionSearch],
+    enabled: suggestionSearch.length > 0 && suggestionSearch === searchInput.trim(),
+    staleTime: 30_000,
+    queryFn: () => api<Paginated<PublicRecord>>(`/billing/invoices${queryString({ page: 1, limit: 6, search: suggestionSearch })}`)
+  });
   if (query.isPending) return <LoadingState label="Loading invoices…" />;
   if (query.isError) return <ErrorState message={query.error.message} onRetry={() => void query.refetch()} />;
   const canCreateInvoice = hasPermission('billing.manage');
@@ -76,7 +85,20 @@ export function InvoicesPage() {
   };
   return <>
     <PageHeader eyebrow="FINANCE" title="Invoices" description="A single source of truth for client billing, line items, tax, payment and printable invoice records." actions={canCreateInvoice ? <button className="button" type="button" onClick={() => setOpen(true)}><Plus size={17} /> New invoice</button> : undefined} />
-    <div className="toolbar invoice-toolbar"><label className="search-box"><Search size={17} /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search invoice number or status…" /></label><div className="invoice-export-controls"><label><span>From</span><input type="date" value={exportFromDate} onChange={(event) => setExportFromDate(event.target.value)} /></label><label><span>To</span><input type="date" value={exportToDate} onChange={(event) => setExportToDate(event.target.value)} /></label><button className="button button--secondary button--compact" type="button" onClick={() => void exportInvoices('all')} disabled={exporting} title="Export every invoice in the selected date range">{exporting && exportMode === 'all' ? <LoaderCircle size={15} className="spin" /> : <FileDown size={15} />} {exporting && exportMode === 'all' ? 'Preparing…' : 'Export all'}</button><button className="button button--secondary button--compact" type="button" onClick={() => void exportInvoices('filtered')} disabled={exporting} title="Export invoices matching the search and selected date range">{exporting && exportMode === 'filtered' ? <LoaderCircle size={15} className="spin" /> : <FileDown size={15} />} {exporting && exportMode === 'filtered' ? 'Preparing…' : 'Export filtered'}</button><span>{query.data.pagination.total} invoices</span></div></div>
+    <div className="toolbar invoice-toolbar"><SearchAutocomplete
+      className="search-autocomplete--invoice"
+      value={searchInput}
+      onChange={setSearchInput}
+      onSubmit={() => { setSearch(searchInput.trim()); setPage(1); }}
+      suggestions={suggestionsQuery.data?.data ?? []}
+      getKey={(invoice) => invoice.id}
+      getLabel={(invoice) => String(invoice.fields.invoice_no ?? `Invoice #${invoice.legacyId ?? ''}`)}
+      getDetail={(invoice) => [invoice.fields.status ? String(invoice.fields.status) : '', invoice.relationLabels?.client_id ? String(invoice.relationLabels.client_id) : '', invoice.fields.total_amount !== undefined ? String(invoice.fields.total_amount) : ''].filter(Boolean).join(' · ')}
+      onSelect={(invoice) => { if (invoice.legacyId) navigate(`/invoices/${invoice.legacyId}`); }}
+      loading={searchInput.trim().length > 0 && (suggestionSearch !== searchInput.trim() || suggestionsQuery.isFetching || suggestionsQuery.isPending)}
+      error={suggestionsQuery.isError}
+      placeholder="Search invoice number, client or status…"
+    /><div className="invoice-export-controls"><label><span>From</span><input type="date" value={exportFromDate} onChange={(event) => setExportFromDate(event.target.value)} /></label><label><span>To</span><input type="date" value={exportToDate} onChange={(event) => setExportToDate(event.target.value)} /></label><button className="button button--secondary button--compact" type="button" onClick={() => void exportInvoices('all')} disabled={exporting} title="Export every invoice in the selected date range">{exporting && exportMode === 'all' ? <LoaderCircle size={15} className="spin" /> : <FileDown size={15} />} {exporting && exportMode === 'all' ? 'Preparing…' : 'Export all'}</button><button className="button button--secondary button--compact" type="button" onClick={() => void exportInvoices('filtered')} disabled={exporting} title="Export invoices matching the search and selected date range">{exporting && exportMode === 'filtered' ? <LoaderCircle size={15} className="spin" /> : <FileDown size={15} />} {exporting && exportMode === 'filtered' ? 'Preparing…' : 'Export filtered'}</button><span>{query.data.pagination.total} invoices</span></div></div>
     {exportError && <p className="form-error">{exportError}</p>}
     <DataTable records={query.data.data} columns={invoiceResource.columns} resource={invoiceResource} page={query.data.pagination.page} pages={query.data.pagination.pages} total={query.data.pagination.total} onPageChange={setPage} onOpen={(record) => navigate(`/invoices/${record.legacyId}`)} clickableRows />
     {canCreateInvoice && <CreateInvoiceDialog open={open} onClose={() => setOpen(false)} onCreated={async () => { await queryClient.invalidateQueries({ queryKey: ['invoices'] }); }} />}
