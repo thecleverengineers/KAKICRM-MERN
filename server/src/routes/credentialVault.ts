@@ -231,7 +231,9 @@ function encrypt(value: string): string {
 function decrypt(value: string): string {
   if (!value) return '';
   const [ivPart, tagPart, encryptedPart] = value.split('.');
-  if (!ivPart || !tagPart || !encryptedPart) throw new HttpError(500, 'A saved credential could not be decrypted.');
+  // AES-GCM ciphertext is empty for an empty plaintext (for example, a blank
+  // username), while the IV and authentication tag are still present.
+  if (!ivPart || !tagPart || encryptedPart === undefined) throw new HttpError(500, 'A saved credential could not be decrypted.');
   // Keep reading ciphertext written before the dedicated vault key was configured.
   // New and updated values still use the current primary key via encryptionKey().
   for (const key of decryptionKeys()) {
