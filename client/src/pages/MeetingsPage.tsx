@@ -1,8 +1,9 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, Check, ChevronLeft, ChevronRight, ExternalLink, Plus, RefreshCw, Search, ShieldCheck, UsersRound, X } from 'lucide-react';
+import { CalendarClock, Check, ChevronLeft, ChevronRight, ExternalLink, Plus, RefreshCw, ShieldCheck, UsersRound, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ErrorState, LoadingState } from '../components/LoadingState.js';
+import { SearchAutocomplete, useDebouncedValue } from '../components/SearchAutocomplete.js';
 import { PageHeader } from '../components/PageHeader.js';
 import { StatusPill } from '../components/StatusPill.js';
 import { api, type Paginated, type PublicRecord, queryString } from '../lib/api.js';
@@ -19,6 +20,8 @@ export function MeetingsPage() {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const suggestionSearch = useDebouncedValue(searchInput.trim());
   const [status, setStatus] = useState('scheduled');
   const [page, setPage] = useState(1);
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -32,6 +35,12 @@ export function MeetingsPage() {
   const query = useQuery({
     queryKey: ['meetings', page, search, status],
     queryFn: () => api<Paginated<PublicRecord>>(`/meetings${queryString({ page, limit: 10, search, status: status === 'all' ? undefined : status })}`)
+  });
+  const suggestionsQuery = useQuery({
+    queryKey: ['meeting-search-suggestions', suggestionSearch, status],
+    enabled: suggestionSearch.length > 0 && suggestionSearch === searchInput.trim(),
+    staleTime: 30_000,
+    queryFn: () => api<Paginated<PublicRecord>>(`/meetings${queryString({ page: 1, limit: 6, search: suggestionSearch, status: status === 'all' ? undefined : status })}`)
   });
   const integration = useQuery({ queryKey: ['google-integration'], enabled: canIntegrate, queryFn: () => api<{ data: IntegrationStatus }>('/integrations/google/status') });
   const users = useQuery({ queryKey: ['meeting-invitee-users'], enabled: scheduleOpen && canManage, queryFn: () => api<Paginated<PublicRecord>>('/records/users?limit=200&sort=name&order=asc') });
@@ -97,7 +106,20 @@ export function MeetingsPage() {
     {integrationNotice && <p className="meeting-inline-success" role="status">{integrationNotice}</p>}
     {error && <p className="form-error meeting-inline-error" role="alert">{error}</p>}
     {canIntegrate && <IntegrationCard status={integration.data?.data} loading={integration.isPending} checking={checkingGoogle} connecting={connectingGoogle} onConnect={() => void connectGoogle()} onReconnect={() => void reconnectGoogle()} onCheck={() => void checkGoogle()} onDisconnect={() => void disconnectGoogle()} />}
-    <div className="meeting-toolbar content-card"><label className="search-box"><Search size={17} /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search meetings…" /></label><label className="field meeting-status-filter"><span>Show</span><select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="scheduled">Scheduled</option><option value="creating">Creating</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option><option value="failed">Failed</option><option value="all">All meetings</option></select></label><span className="meeting-count">{result.pagination.total} record{result.pagination.total === 1 ? '' : 's'}</span></div>
+    <div className="meeting-toolbar content-card"><SearchAutocomplete
+      className="search-autocomplete--meeting"
+      value={searchInput}
+      onChange={setSearchInput}
+      onSubmit={() => { setSearch(searchInput.trim()); setPage(1); }}
+      suggestions={suggestionsQuery.data?.data ?? []}
+      getKey={(meeting) => meeting.id}
+      getLabel={(meeting) => String(meeting.fields.title ?? meeting.fields.name ?? 'Untitled meeting')}
+      getDetail={(meeting) => [meeting.fields.status ? String(meeting.fields.status).replaceAll('_', ' ') : '', meeting.fields.scheduled_start ? dateTime(meeting.fields.scheduled_start) : ''].filter(Boolean).join(' · ')}
+      onSelect={(meeting) => { if (meeting.legacyId) navigate(`/data/meetings/${meeting.legacyId}`); }}
+      loading={searchInput.trim().length > 0 && (suggestionSearch !== searchInput.trim() || suggestionsQuery.isFetching || suggestionsQuery.isPending)}
+      error={suggestionsQuery.isError}
+      placeholder="Search meetings…"
+    /><label className="field meeting-status-filter"><span>Show</span><select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="scheduled">Scheduled</option><option value="creating">Creating</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option><option value="failed">Failed</option><option value="all">All meetings</option></select></label><span className="meeting-count">{result.pagination.total} record{result.pagination.total === 1 ? '' : 's'}</span></div>
     <section className="meeting-list" aria-label="Meetings list">
       {result.data.map((meeting) => <MeetingCard key={meeting.id} meeting={meeting} onOpen={() => navigate(`/data/meetings/${meeting.legacyId}`)} />)}
       {!result.data.length && <div className="content-card meeting-empty"><CalendarClock size={28} /><strong>No meetings found</strong><span>Schedule a meeting after connecting an authorised Google Calendar account.</span></div>}

@@ -1,8 +1,9 @@
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileText, Filter, Plus, Search, X } from 'lucide-react';
+import { FileText, Filter, Plus, X } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DataTable } from '../components/DataTable.js';
+import { SearchAutocomplete, useDebouncedValue } from '../components/SearchAutocomplete.js';
 import { ErrorState, LoadingState } from '../components/LoadingState.js';
 import { PageHeader } from '../components/PageHeader.js';
 import { RecordFormDialog } from '../components/RecordFormDialog.js';
@@ -19,7 +20,8 @@ export function EntityPage({ resourceIdOverride }: { resourceIdOverride?: string
   const { hasPermission } = useAuth();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  const deferredSearch = useDeferredValue(search);
+  const [searchInput, setSearchInput] = useState('');
+  const suggestionSearch = useDebouncedValue(searchInput.trim());
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [searchField, setSearchField] = useState('');
   const [searchMode, setSearchMode] = useState<'all' | 'any'>('all');
@@ -44,9 +46,15 @@ export function EntityPage({ resourceIdOverride }: { resourceIdOverride?: string
     setPage(1);
   }, [collection, filterSignature, activeProjectFilter]);
   const query = useQuery({
-    queryKey: ['records', collection, page, deferredSearch, filterSignature, searchField, searchMode, sortField, sortOrder, includeArchived],
+    queryKey: ['records', collection, page, search, filterSignature, searchField, searchMode, sortField, sortOrder, includeArchived],
     enabled: Boolean(collection),
-    queryFn: () => api<Paginated<PublicRecord>>(`/records/${encodeURIComponent(collection)}${queryString({ page, limit: 25, search: deferredSearch, searchFields: searchField || configured?.searchFields?.join(','), searchMode, sort: sortField || undefined, order: sortOrder, filters: recordFilters, includeArchived })}`)
+    queryFn: () => api<Paginated<PublicRecord>>(`/records/${encodeURIComponent(collection)}${queryString({ page, limit: 25, search, searchFields: searchField || configured?.searchFields?.join(','), searchMode, sort: sortField || undefined, order: sortOrder, filters: recordFilters, includeArchived })}`)
+  });
+  const suggestionsQuery = useQuery({
+    queryKey: ['record-search-suggestions', collection, suggestionSearch, filterSignature, searchField, searchMode, sortField, sortOrder, includeArchived],
+    enabled: Boolean(collection) && suggestionSearch.length > 0 && suggestionSearch === searchInput.trim(),
+    staleTime: 30_000,
+    queryFn: () => api<Paginated<PublicRecord>>(`/records/${encodeURIComponent(collection)}${queryString({ page: 1, limit: 6, search: suggestionSearch, searchFields: searchField || configured?.searchFields?.join(','), searchMode, sort: sortField || undefined, order: sortOrder, filters: recordFilters, includeArchived })}`)
   });
   const resource = useMemo(() => configured ?? inferredResource(collection, query.data?.data ?? []), [collection, configured, query.data?.data]);
   if (!collection) return <ErrorState message="No data collection was selected." />;
@@ -90,7 +98,20 @@ export function EntityPage({ resourceIdOverride }: { resourceIdOverride?: string
   const clearAdvanced = () => { setSearchField(''); setSearchMode('all'); setSortField(''); setSortOrder('desc'); setStatusFilter(''); setIncludeArchived(false); setPage(1); };
   return <>
     <PageHeader eyebrow={activeProjectFilter ? 'PROJECT OPERATIONS' : 'DATA MANAGEMENT'} title={pageTitle} description={pageDescription} actions={<button className="button" onClick={() => setEditing(null)}><Plus size={17} /> New {resource.singular}</button>} />
-    <div className="toolbar advanced-search-toolbar"><div className="advanced-search-main"><label className="search-box"><Search size={17} /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder={`Search ${pageTitle.toLowerCase()}… Use field:value or quoted phrases`} /></label><button type="button" className={`button button--secondary advanced-search-toggle${advancedOpen ? ' is-active' : ''}`} onClick={() => setAdvancedOpen((current) => !current)}><Filter size={16} /> Advanced {advancedOpen ? <X size={14} /> : null}</button></div><span>{result.pagination.total} {activeProjectFilter ? 'active' : 'total'}</span></div>
+    <div className="toolbar advanced-search-toolbar"><div className="advanced-search-main"><SearchAutocomplete
+      className="search-autocomplete--entity"
+      value={searchInput}
+      onChange={setSearchInput}
+      onSubmit={() => { setSearch(searchInput.trim()); setPage(1); }}
+      suggestions={suggestionsQuery.data?.data ?? []}
+      getKey={(record) => record.id}
+      getLabel={(record) => String(record.fields.title ?? record.fields.name ?? record.fields.invoice_no ?? record.fields.legal_name ?? record.fields.email ?? `Record #${record.legacyId ?? ''}`)}
+      getDetail={(record) => [resource.singular, record.legacyId ? `#${record.legacyId}` : '', record.fields.status ? String(record.fields.status).replaceAll('_', ' ') : ''].filter(Boolean).join(' · ')}
+      onSelect={openRecord}
+      loading={searchInput.trim().length > 0 && (suggestionSearch !== searchInput.trim() || suggestionsQuery.isFetching || suggestionsQuery.isPending)}
+      error={suggestionsQuery.isError}
+      placeholder={`Search ${pageTitle.toLowerCase()}…`}
+    /><button type="button" className={`button button--secondary advanced-search-toggle${advancedOpen ? ' is-active' : ''}`} onClick={() => setAdvancedOpen((current) => !current)}><Filter size={16} /> Advanced {advancedOpen ? <X size={14} /> : null}</button></div><span>{result.pagination.total} {activeProjectFilter ? 'active' : 'total'}</span></div>
     {advancedOpen && <section className="advanced-search-panel content-card"><div className="advanced-search-grid"><label className="field"><span>Search fields</span><select value={searchField} onChange={(event) => { setSearchField(event.target.value); setPage(1); }}><option value="">Configured fields</option>{searchableFields.map((field) => <option key={field.key} value={field.key}>{field.label}</option>)}</select></label><label className="field"><span>Match mode</span><select value={searchMode} onChange={(event) => { setSearchMode(event.target.value as 'all' | 'any'); setPage(1); }}><option value="all">All terms</option><option value="any">Any term</option></select></label><label className="field"><span>Sort by</span><select value={sortField} onChange={(event) => { setSortField(event.target.value); setPage(1); }}><option value="">Recently updated</option>{searchableFields.map((field) => <option key={field.key} value={field.key}>{field.label}</option>)}</select></label><label className="field"><span>Order</span><select value={sortOrder} onChange={(event) => { setSortOrder(event.target.value as 'asc' | 'desc'); setPage(1); }}><option value="desc">Newest / Z–A</option><option value="asc">Oldest / A–Z</option></select></label><label className="field"><span>Status filter</span><input value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }} placeholder="e.g. active, pending" /></label>{canIncludeArchived && <label className="toggle-field advanced-search-archive"><input type="checkbox" checked={includeArchived} onChange={(event) => { setIncludeArchived(event.target.checked); setPage(1); }} /><span>Include archived</span></label>}</div><div className="advanced-search-help">Search supports multiple terms, quoted phrases, and field filters such as <code>status:active</code> or <code>email:gmail.com</code>.<button type="button" className="text-button" onClick={clearAdvanced}>Reset advanced search</button></div></section>}
     <DataTable records={result.data} columns={resource.columns} resource={resource} page={result.pagination.page} pages={result.pagination.pages} total={result.pagination.total} onPageChange={setPage} onOpen={openRecord} clickableRows={collection === 'users' || collection === 'department_projects' || collection === 'teams' || collection === 'billing_profiles'} onEdit={(record) => setEditing(record)} onArchive={archive} />
     <RecordFormDialog open={editing !== undefined} resource={resource} record={editing} onClose={() => setEditing(undefined)} onSubmit={save} />

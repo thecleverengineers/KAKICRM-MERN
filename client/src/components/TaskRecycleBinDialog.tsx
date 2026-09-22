@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArchiveRestore, CheckSquare2, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
+import { ArchiveRestore, CheckSquare2, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { api, type Paginated, type PublicRecord, queryString } from '../lib/api.js';
+import { SearchAutocomplete, useDebouncedValue } from './SearchAutocomplete.js';
 import { dateTime, displayValue } from '../lib/format.js';
 
 interface RestoreResponse {
@@ -21,6 +22,8 @@ export function TaskRecycleBinDialog({ open, onClose, onRestored }: Props) {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const suggestionSearch = useDebouncedValue(searchInput.trim());
   const [selectedTaskIds, setSelectedTaskIds] = useState<number[]>([]);
   const [restoring, setRestoring] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -30,6 +33,7 @@ export function TaskRecycleBinDialog({ open, onClose, onRestored }: Props) {
     if (!open) return;
     setPage(1);
     setSearch('');
+    setSearchInput('');
     setSelectedTaskIds([]);
     setActionError(null);
     setNotice(null);
@@ -39,6 +43,12 @@ export function TaskRecycleBinDialog({ open, onClose, onRestored }: Props) {
     queryKey: ['task-recycle-bin', page, search],
     enabled: open,
     queryFn: () => api<Paginated<PublicRecord>>(`/tasks/recycle-bin${queryString({ page, limit: 50, search })}`)
+  });
+  const suggestionsQuery = useQuery({
+    queryKey: ['task-recycle-search-suggestions', suggestionSearch],
+    enabled: open && suggestionSearch.length > 0 && suggestionSearch === searchInput.trim(),
+    staleTime: 30_000,
+    queryFn: () => api<Paginated<PublicRecord>>(`/tasks/recycle-bin${queryString({ page: 1, limit: 6, search: suggestionSearch })}`)
   });
 
   const visibleTaskIds = (query.data?.data ?? [])
@@ -102,7 +112,20 @@ export function TaskRecycleBinDialog({ open, onClose, onRestored }: Props) {
     <section className="modal task-recycle-modal" role="dialog" aria-modal="true" aria-label="Task recycle bin" onMouseDown={(event) => event.stopPropagation()}>
       <div className="modal-header"><div><p className="eyebrow">TASK RECYCLE</p><h2>Restore archived tasks</h2></div><button className="icon-button" type="button" onClick={close} disabled={restoring} aria-label="Close"><X size={18} /></button></div>
       <p className="task-recycle-copy">Recycled tasks keep their original task updates, chat, time logs, files, assignments and project links. Restoring returns them to the active task workflow.</p>
-      <div className="task-recycle-toolbar"><label className="search-box"><Search size={17} /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); setSelectedTaskIds([]); }} placeholder="Search recycled tasks…" /></label><span>{query.data?.pagination.total ?? 0} in recycle</span></div>
+      <div className="task-recycle-toolbar"><SearchAutocomplete
+        className="search-autocomplete--recycle"
+        value={searchInput}
+        onChange={setSearchInput}
+        onSubmit={() => { setSearch(searchInput.trim()); setPage(1); setSelectedTaskIds([]); }}
+        suggestions={suggestionsQuery.data?.data ?? []}
+        getKey={(task) => task.id}
+        getLabel={(task) => String(task.fields.title ?? `Task #${task.legacyId ?? ''}`)}
+        getDetail={(task) => `${String(task.fields.status ?? 'pending').replaceAll('_', ' ')} · ${String(task.fields.priority ?? 'normal')} priority`}
+        onSelect={(task) => { const title = String(task.fields.title ?? ''); setSearchInput(title); setSearch(title); setPage(1); setSelectedTaskIds([]); }}
+        loading={searchInput.trim().length > 0 && (suggestionSearch !== searchInput.trim() || suggestionsQuery.isFetching || suggestionsQuery.isPending)}
+        error={suggestionsQuery.isError}
+        placeholder="Search recycled tasks…"
+      /><span>{query.data?.pagination.total ?? 0} in recycle</span></div>
       {notice && <p className="task-recycle-notice" role="status">{notice}</p>}
       {actionError && <p className="form-error">{actionError}</p>}
       {query.isPending && <div className="task-recycle-loading">Loading recycle bin…</div>}
