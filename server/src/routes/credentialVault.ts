@@ -232,18 +232,28 @@ function decrypt(value: string): string {
   if (!value) return '';
   const [ivPart, tagPart, encryptedPart] = value.split('.');
   if (!ivPart || !tagPart || !encryptedPart) throw new HttpError(500, 'A saved credential could not be decrypted.');
-  try {
-    const decipher = createDecipheriv('aes-256-gcm', encryptionKey(), Buffer.from(ivPart, 'base64'));
-    decipher.setAuthTag(Buffer.from(tagPart, 'base64'));
-    return Buffer.concat([decipher.update(Buffer.from(encryptedPart, 'base64')), decipher.final()]).toString('utf8');
-  } catch {
-    throw new HttpError(500, 'A saved credential could not be decrypted. Check that the vault encryption key has not changed.');
+  // Keep reading ciphertext written before the dedicated vault key was configured.
+  // New and updated values still use the current primary key via encryptionKey().
+  for (const key of decryptionKeys()) {
+    try {
+      const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivPart, 'base64'));
+      decipher.setAuthTag(Buffer.from(tagPart, 'base64'));
+      return Buffer.concat([decipher.update(Buffer.from(encryptedPart, 'base64')), decipher.final()]).toString('utf8');
+    } catch {
+      // Try the next configured legacy key.
+    }
   }
+  throw new HttpError(500, 'A saved credential could not be decrypted. Check that the vault encryption key has not changed.');
 }
 
 function encryptionKey(): Buffer {
-  const secret = env.CREDENTIAL_VAULT_ENCRYPTION_SECRET ?? env.SETTINGS_ENCRYPTION_SECRET ?? env.JWT_ACCESS_SECRET;
-  return createHash('sha256').update(secret).digest();
+  return decryptionKeys()[0]!;
+}
+
+function decryptionKeys(): Buffer[] {
+  const secrets = [env.CREDENTIAL_VAULT_ENCRYPTION_SECRET, env.SETTINGS_ENCRYPTION_SECRET, env.JWT_ACCESS_SECRET];
+  const uniqueSecrets = [...new Set(secrets.filter((secret): secret is string => Boolean(secret)))];
+  return uniqueSecrets.map((secret) => createHash('sha256').update(secret).digest());
 }
 
 function isDuplicateKey(error: unknown): boolean {
