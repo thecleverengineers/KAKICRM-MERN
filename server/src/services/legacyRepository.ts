@@ -15,6 +15,8 @@ export interface ListOptions {
   search?: string;
   searchFields?: string[];
   searchMode?: 'all' | 'any';
+  /** Additional record matches ORed with the text search, before pagination. */
+  searchAlternatives?: FilterQuery<LegacyRecord>[];
   sort?: string;
   order?: 'asc' | 'desc';
   filters?: Record<string, string | number | boolean | null>;
@@ -205,7 +207,10 @@ function buildQuery(options: ListOptions): FilterQuery<LegacyRecord> {
       const expression = new RegExp(escapeRegex(term), 'i');
       return { $or: fields.map((field) => ({ [`raw.${field}`]: expression })) };
     });
-    if (termClauses.length) clauses.push(options.searchMode === 'any' ? { $or: termClauses } : { $and: termClauses });
+    if (termClauses.length) {
+      const textSearch = options.searchMode === 'any' ? { $or: termClauses } : { $and: termClauses };
+      clauses.push(options.searchAlternatives?.length ? { $or: [textSearch, ...options.searchAlternatives] } : textSearch);
+    }
   }
 
   for (const [field, value] of Object.entries(options.filters ?? {})) {
