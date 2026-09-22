@@ -153,16 +153,17 @@ export function TasksPage() {
     <div className="toolbar task-toolbar task-toolbar--records">
       <div className="task-search-area" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setSearchOpen(false); }}>
         <form className="task-search-form" onSubmit={(event) => { event.preventDefault(); applySearch(); }}>
-          <label className="search-box"><Search size={17} /><input value={searchInput} onFocus={() => setSearchOpen(true)} onChange={(event) => { setSearchInput(event.target.value); setSearchOpen(true); }} placeholder="Search tasks…" aria-label="Search tasks" aria-autocomplete="list" aria-expanded={searchOpen} /></label>
+          <label className="search-box"><Search size={17} /><input value={searchInput} onFocus={() => setSearchOpen(true)} onChange={(event) => { setSearchInput(event.target.value); setSearchOpen(true); }} placeholder="Search task or assignee…" aria-label="Search task or assignee" aria-autocomplete="list" aria-expanded={searchOpen} /></label>
           <button className="button button--secondary button--compact task-search-submit" type="submit">Search</button>
         </form>
         {searchOpen && searchInput.trim().length >= 1 && <div className="task-search-suggestions" role="listbox" aria-label="Task suggestions">
           {suggestionTerm !== searchInput.trim() || suggestionsQuery.isFetching ? <p className="task-search-message">Finding suggestions…</p> : suggestionsQuery.data?.data.length ? suggestionsQuery.data.data.map((record) => {
             const title = String(record.fields.title ?? 'Untitled task');
             const taskId = record.legacyId;
+            const assignees = record.relationLabels?.assignee_ids ?? record.relationLabels?.assignee_id;
             return <button className="task-search-suggestion" type="button" role="option" aria-selected="false" key={record.id} onClick={() => { setSearchOpen(false); if (taskId) navigate('/tasks/' + taskId); }}>
               <span className="task-search-suggestion__title">{title}</span>
-              <span className="task-search-suggestion__meta">{String(record.fields.status ?? 'pending').replace(/_/g, ' ')} · {String(record.fields.priority ?? 'normal')} priority</span>
+              <span className="task-search-suggestion__meta">{String(record.fields.status ?? 'pending').replace(/_/g, ' ')} · {String(record.fields.priority ?? 'normal')} priority{assignees ? ' · ' + assignees : ''}</span>
             </button>;
           }) : <p className="task-search-message">No matching tasks found.</p>}
           <button className="task-search-all" type="button" onClick={() => applySearch()}>Show all results for “{searchInput.trim()}”</button>
