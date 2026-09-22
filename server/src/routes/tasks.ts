@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
-import { type LegacyRecord, toPublicRecord } from '../db/legacy.js';
+import { getLegacyModel, type LegacyRecord, toPublicRecord } from '../db/legacy.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/rbac.js';
 import { emitRealtime } from '../realtime.js';
@@ -92,6 +92,7 @@ const taskStatusSchema = z.object({
 });
 const taskListStatusSchema = z.enum(['pending', 'in_progress', 'review', 'completed', 'blocked']);
 const taskListPrioritySchema = z.enum(['low', 'normal', 'high', 'urgent']);
+const taskAssigneeSearchFields = ['assignee_id', 'assignee_ids', 'assignee_user_id', 'assigned_to', 'assigned_to_id', 'assigned_user_id', 'assigned_user_ids'] as const;
 
 export const tasksRouter = Router();
 tasksRouter.use(requireAuth);
@@ -111,11 +112,18 @@ tasksRouter.get('/', asyncHandler(async (req, res) => {
   const taskScope = employeeOnly ? await taskVisibilityScopeWithRelationships(req.auth!.legacyId) : undefined;
   const statusFilter = taskListStatusSchema.safeParse(req.query.status);
   const priorityFilter = taskListPrioritySchema.safeParse(req.query.priority);
+  const searchTerm = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+  const matchingAssigneeIds = searchTerm ? await assigneeIdsByName(searchTerm) : [];
+  const assigneeValues = matchingAssigneeIds.flatMap((id) => [id, String(id)]);
+  const searchAlternatives = assigneeValues.length
+    ? taskAssigneeSearchFields.map((field) => ({ [`raw.${field}`]: { $in: assigneeValues } }))
+    : [];
   const result = await listLegacyRecords('tasks', {
     page: numberQuery(req.query.page, 1),
     limit: numberQuery(req.query.limit, 50),
-    search: typeof req.query.search === 'string' ? req.query.search : undefined,
+    search: searchTerm || undefined,
     searchFields: ['title', 'description', 'status', 'priority'],
+    searchAlternatives,
     filters: {
       ...(statusFilter.success ? { status: statusFilter.data } : {}),
       ...(priorityFilter.success ? { priority: priorityFilter.data } : {})
@@ -955,6 +963,16 @@ function parseArrayInput(value: unknown): unknown {
   } catch {
     return trimmed.split(',').map((item) => item.trim()).filter(Boolean);
   }
+}
+
+async function assigneeIdsByName(searchTerm: string): Promise<number[]> {
+  const expression = new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  const users = await getLegacyModel('users')
+    .find({ archivedAt: { $exists: false }, 'raw.name': expression })
+    .select({ legacyId: 1 })
+    .limit(1_000)
+    .lean<LegacyRecord[]>();
+  return [...new Set(users.map((user) => user.legacyId).filter((id): id is number => Number.isSafeInteger(id) && (id ?? 0) > 0))];
 }
 
 function numberQuery(value: unknown, fallback: number): number {
