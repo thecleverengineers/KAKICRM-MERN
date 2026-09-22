@@ -90,6 +90,8 @@ const taskRecycleSchema = z.object({
 const taskStatusSchema = z.object({
   status: z.enum(['pending', 'in_progress', 'review', 'completed', 'blocked'])
 });
+const taskListStatusSchema = z.enum(['pending', 'in_progress', 'review', 'completed', 'blocked']);
+const taskListPrioritySchema = z.enum(['low', 'normal', 'high', 'urgent']);
 
 export const tasksRouter = Router();
 tasksRouter.use(requireAuth);
@@ -107,11 +109,17 @@ function requireTaskCreateAccess(req: import('express').Request, res: import('ex
 tasksRouter.get('/', asyncHandler(async (req, res) => {
   const employeeOnly = isEmployeeRole(req.auth!);
   const taskScope = employeeOnly ? await taskVisibilityScopeWithRelationships(req.auth!.legacyId) : undefined;
+  const statusFilter = taskListStatusSchema.safeParse(req.query.status);
+  const priorityFilter = taskListPrioritySchema.safeParse(req.query.priority);
   const result = await listLegacyRecords('tasks', {
     page: numberQuery(req.query.page, 1),
     limit: numberQuery(req.query.limit, 50),
     search: typeof req.query.search === 'string' ? req.query.search : undefined,
     searchFields: ['title', 'description', 'status', 'priority'],
+    filters: {
+      ...(statusFilter.success ? { status: statusFilter.data } : {}),
+      ...(priorityFilter.success ? { priority: priorityFilter.data } : {})
+    },
     sort: typeof req.query.sort === 'string' ? req.query.sort : 'due_date',
     order: req.query.order === 'asc' ? 'asc' : 'desc',
     // Scope before pagination so the total count and every page follow the
