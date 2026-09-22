@@ -7,7 +7,7 @@ import { createLegacyRecord, listRawRecords, updateLegacyRecord } from '../servi
 import { can } from '../services/permissions.js';
 import { persistIncomingFile, storedAssetUrl } from '../services/storage.js';
 import { clearFast2SmsWhatsAppApiKey, readFast2SmsWhatsAppStatus, saveFast2SmsWhatsAppApiKey } from '../services/fast2smsSettings.js';
-import { connectWhatsAppBusiness, disconnectWhatsAppBusiness, readWhatsAppBusinessStatus, verifySavedWhatsAppBusinessConnection } from '../services/whatsappBusinessSettings.js';
+import { createWhatsAppBusinessAccount, createWhatsAppCampaign, createWhatsAppTemplate, deleteWhatsAppBusinessAccount, deleteWhatsAppTemplate, listWhatsAppBusinessAccounts, listWhatsAppCampaignAccounts, listWhatsAppCampaigns, listWhatsAppTemplates, refreshWhatsAppBusinessAccount, sendWhatsAppCampaignBatch, updateWhatsAppBusinessAccount, updateWhatsAppTemplate } from '../services/whatsappBusinessSettings.js';
 import { asyncHandler, HttpError } from '../utils/http.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
@@ -52,9 +52,35 @@ const brandingSchema = z.object({
 const fast2SmsCredentialSchema = z.object({
   apiKey: z.string().trim().min(8, 'Enter a valid Fast2SMS authorization key.').max(1_000)
 });
-const whatsAppBusinessCredentialSchema = z.object({
+const whatsAppBusinessAccountSchema = z.object({
+  name: z.string().trim().min(2).max(100),
   accessToken: z.string().trim().min(20, 'Enter the Meta system-user access token.').max(4_096),
-  phoneNumberId: z.string().trim().regex(/^\d{5,32}$/, 'Enter the numeric WhatsApp Business phone number ID.')
+  wabaId: z.string().trim().regex(/^\d{5,32}$/, 'Enter the numeric WhatsApp Business Account ID.')
+});
+const whatsAppBusinessAccountUpdateSchema = z.object({
+  name: z.string().trim().min(2).max(100).optional(),
+  accessToken: z.string().trim().min(20).max(4_096).optional(),
+  wabaId: z.string().trim().regex(/^\d{5,32}$/).optional()
+}).refine((value) => Object.keys(value).length > 0, 'Provide a name or replacement credentials.');
+const whatsAppTemplateCreateSchema = z.object({
+  name: z.string().trim().regex(/^[a-z0-9_]{1,512}$/, 'Use lowercase letters, numbers, and underscores for the template name.'),
+  category: z.enum(['MARKETING', 'UTILITY', 'AUTHENTICATION']),
+  language: z.string().trim().regex(/^[a-z]{2,3}(_[A-Z]{2})?$/).max(20),
+  components: z.array(z.record(z.unknown())).min(1).max(10)
+});
+const whatsAppTemplateUpdateSchema = z.object({
+  components: z.array(z.record(z.unknown())).min(1).max(10)
+});
+const whatsAppCampaignSchema = z.object({
+  name: z.string().trim().min(2).max(100),
+  accountId: z.string().uuid(),
+  phoneKey: z.string().uuid(),
+  templateId: z.string().trim().min(1).max(128),
+  recipients: z.array(z.object({
+    phone: z.string().trim().min(8).max(32),
+    variables: z.array(z.string().max(1_024)).max(10).default([])
+  })).min(1).max(1_000),
+  allRecipientsOptedIn: z.literal(true)
 });
 const whatsAppConnectLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false });
 
@@ -105,23 +131,65 @@ settingsRouter.delete('/integrations/fast2sms-whatsapp', requireAuth, requireAdm
   res.json({ data: await clearFast2SmsWhatsAppApiKey(req.auth!.legacyId) });
 }));
 
-// Meta credentials are write-only from the browser. Status responses contain
-// only verified business display details, never the token or phone-number ID.
+// Meta credentials are write-only from the browser. Responses contain only
+// opaque CRM IDs and Meta's display/status fields.
 settingsRouter.get('/integrations/whatsapp-business', requireAuth, requireWhatsAppBusinessManage, asyncHandler(async (_req, res) => {
-  res.json({ data: await readWhatsAppBusinessStatus() });
+  res.json({ data: await listWhatsAppBusinessAccounts() });
 }));
 
-settingsRouter.put('/integrations/whatsapp-business', requireAuth, requireWhatsAppBusinessManage, whatsAppConnectLimiter, asyncHandler(async (req, res) => {
-  const input = whatsAppBusinessCredentialSchema.parse(req.body);
-  res.json({ data: await connectWhatsAppBusiness(input.accessToken, input.phoneNumberId, req.auth!.legacyId) });
+settingsRouter.post('/integrations/whatsapp-business', requireAuth, requireWhatsAppBusinessManage, whatsAppConnectLimiter, asyncHandler(async (req, res) => {
+  const input = whatsAppBusinessAccountSchema.parse(req.body);
+  res.status(201).json({ data: await createWhatsAppBusinessAccount(input, req.auth!.legacyId) });
 }));
 
-settingsRouter.post('/integrations/whatsapp-business/verify', requireAuth, requireWhatsAppBusinessManage, whatsAppConnectLimiter, asyncHandler(async (req, res) => {
-  res.json({ data: await verifySavedWhatsAppBusinessConnection(req.auth!.legacyId) });
+settingsRouter.patch('/integrations/whatsapp-business/:accountId', requireAuth, requireWhatsAppBusinessManage, whatsAppConnectLimiter, asyncHandler(async (req, res) => {
+  const input = whatsAppBusinessAccountUpdateSchema.parse(req.body);
+  res.json({ data: await updateWhatsAppBusinessAccount(z.string().uuid().parse(req.params.accountId), input, req.auth!.legacyId) });
 }));
 
-settingsRouter.delete('/integrations/whatsapp-business', requireAuth, requireWhatsAppBusinessManage, asyncHandler(async (req, res) => {
-  res.json({ data: await disconnectWhatsAppBusiness(req.auth!.legacyId) });
+settingsRouter.post('/integrations/whatsapp-business/:accountId/refresh', requireAuth, requireWhatsAppBusinessManage, whatsAppConnectLimiter, asyncHandler(async (req, res) => {
+  res.json({ data: await refreshWhatsAppBusinessAccount(z.string().uuid().parse(req.params.accountId), req.auth!.legacyId) });
+}));
+
+settingsRouter.delete('/integrations/whatsapp-business/:accountId', requireAuth, requireWhatsAppBusinessManage, asyncHandler(async (req, res) => {
+  res.json({ data: await deleteWhatsAppBusinessAccount(z.string().uuid().parse(req.params.accountId), req.auth!.legacyId) });
+}));
+
+settingsRouter.get('/integrations/whatsapp-business/:accountId/templates', requireAuth, requireWhatsAppBusinessManage, whatsAppConnectLimiter, asyncHandler(async (req, res) => {
+  res.json({ data: await listWhatsAppTemplates(z.string().uuid().parse(req.params.accountId)) });
+}));
+
+settingsRouter.post('/integrations/whatsapp-business/:accountId/templates', requireAuth, requireWhatsAppBusinessManage, whatsAppConnectLimiter, asyncHandler(async (req, res) => {
+  const input = whatsAppTemplateCreateSchema.parse(req.body);
+  res.status(201).json({ data: await createWhatsAppTemplate(z.string().uuid().parse(req.params.accountId), input) });
+}));
+
+settingsRouter.patch('/integrations/whatsapp-business/:accountId/templates/:templateId', requireAuth, requireWhatsAppBusinessManage, whatsAppConnectLimiter, asyncHandler(async (req, res) => {
+  const input = whatsAppTemplateUpdateSchema.parse(req.body);
+  res.json({ data: await updateWhatsAppTemplate(z.string().uuid().parse(req.params.accountId), z.string().trim().min(1).max(128).parse(req.params.templateId), input) });
+}));
+
+settingsRouter.delete('/integrations/whatsapp-business/:accountId/templates/:templateId', requireAuth, requireWhatsAppBusinessManage, whatsAppConnectLimiter, asyncHandler(async (req, res) => {
+  res.json({ data: await deleteWhatsAppTemplate(z.string().uuid().parse(req.params.accountId), z.string().trim().min(1).max(128).parse(req.params.templateId)) });
+}));
+
+// Any authenticated staff member can launch a campaign through an active
+// company connection. Meta tokens remain on the server and are never returned.
+settingsRouter.get('/integrations/whatsapp-business/campaign-accounts', requireAuth, asyncHandler(async (_req, res) => {
+  res.json({ data: await listWhatsAppCampaignAccounts() });
+}));
+
+settingsRouter.get('/integrations/whatsapp-business/campaigns', requireAuth, asyncHandler(async (req, res) => {
+  res.json({ data: await listWhatsAppCampaigns(req.auth!.legacyId) });
+}));
+
+settingsRouter.post('/integrations/whatsapp-business/campaigns', requireAuth, whatsAppCampaignSendLimiter, asyncHandler(async (req, res) => {
+  const input = whatsAppCampaignSchema.parse(req.body);
+  res.status(201).json({ data: await createWhatsAppCampaign(input, req.auth!.legacyId) });
+}));
+
+settingsRouter.post('/integrations/whatsapp-business/campaigns/:campaignId/send-next', requireAuth, whatsAppCampaignSendLimiter, asyncHandler(async (req, res) => {
+  res.json({ data: await sendWhatsAppCampaignBatch(z.string().uuid().parse(req.params.campaignId), req.auth!.legacyId) });
 }));
 
 function requireBrandingManage(req: Request, res: Response, next: NextFunction): void {
@@ -142,8 +210,8 @@ function requireWhatsAppBusinessManage(req: Request, res: Response, next: NextFu
     return;
   }
   const role = String(req.auth.role).trim().toLowerCase().replace(/[\s-]+/g, '_');
-  if (!['admin', 'administrator', 'hr', 'hr_manager', 'human_resources', 'human_resource', 'ceo', 'chief_executive_officer', 'chief_executive'].includes(role)) {
-    res.status(403).json({ error: 'Only an administrator, HR, or CEO can manage the WhatsApp Business connection.' });
+  if (!['admin', 'administrator', 'hr', 'hr_manager', 'human_resources', 'human_resource', 'manager', 'ceo', 'chief_executive_officer', 'chief_executive'].includes(role)) {
+    res.status(403).json({ error: 'Only an administrator, HR, manager, or CEO can manage WhatsApp Business.' });
     return;
   }
   next();
