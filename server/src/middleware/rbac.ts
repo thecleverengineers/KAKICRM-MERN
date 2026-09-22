@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { can, isAdminOrHrRole, isCeoRole, isEmployeeRole } from '../services/permissions.js';
+import { can, canManageLeave, canViewLeave, isAdminOrHrRole, isCeoRole, isEmployeeRole } from '../services/permissions.js';
 
 export function requirePermission(permission: string) {
   return (req: Request, res: Response, next: NextFunction): void => {
@@ -96,6 +96,7 @@ export function hasCollectionAccess(req: Request, collection: string, mode: 'rea
       ? can(req.auth, 'meetings.view') || can(req.auth, 'meetings.viewAttendance') || isEmployeeRole(req.auth)
       : can(req.auth, 'meetings.manage') || can(req.auth, 'meetings.create') || can(req.auth, 'meetings.update') || can(req.auth, 'meetings.cancel');
   }
+  if (collection === 'leave_requests') return mode === 'read' ? canViewLeave(req.auth) : canManageLeave(req.auth);
   const permission = collectionPermissions[collection]?.[mode];
   return permission ? can(req.auth, permission) : false;
 }

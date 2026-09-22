@@ -1,23 +1,92 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarPlus } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DataTable } from '../components/DataTable.js';
 import { ErrorState, LoadingState } from '../components/LoadingState.js';
 import { PageHeader } from '../components/PageHeader.js';
 import { type ResourceConfig } from '../config/resources.js';
 import { api, type Paginated, type PublicRecord } from '../lib/api.js';
+import { canManageLeaveAccess } from '../lib/leaveAccess.js';
+import { useAuth } from '../store/auth.js';
+import '../styles/leave.css';
 
 const leaveResource: ResourceConfig = { id: 'leave_requests', label: 'My Leave', singular: 'Leave request', description: 'Apply for leave, track review status and retain proof files.', icon: CalendarPlus, columns: ['leave_type', 'start_date', 'end_date', 'days_count', 'status', 'review_note'], fields: [] };
+const managementResource: ResourceConfig = {
+  ...leaveResource,
+  label: 'Employee leave requests',
+  description: 'Review employee leave requests and their decision history.',
+  columns: ['user_id', 'leave_type', 'start_date', 'end_date', 'days_count', 'status'],
+  fields: [
+    { key: 'user_id', label: 'Employee', kind: 'relation', relation: 'users' },
+    { key: 'leave_type', label: 'Leave type' },
+    { key: 'start_date', label: 'Start date', kind: 'date' },
+    { key: 'end_date', label: 'End date', kind: 'date' },
+    { key: 'days_count', label: 'Days' },
+    { key: 'status', label: 'Status' }
+  ]
+};
 
 export function LeavePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const canManage = canManageLeaveAccess(user?.role, user?.permissions);
+  const view = canManage && searchParams.get('view') !== 'mine' ? 'manage' : 'mine';
+  const [page, setPage] = useState(1);
+  const [status, setStatus] = useState('pending');
   const [open, setOpen] = useState(false);
-  const query = useQuery({ queryKey: ['my-leave'], queryFn: () => api<Paginated<PublicRecord>>('/leave/mine?limit=100') });
-  if (query.isPending) return <LoadingState label="Loading leave records…" />;
+  const query = useQuery({
+    queryKey: ['leave-requests', view, page, status],
+    queryFn: () => api<Paginated<PublicRecord>>(view === 'manage'
+      ? `/leave/manage?page=${page}&limit=15${status === 'all' ? '' : `&status=${encodeURIComponent(status)}`}`
+      : `/leave/mine?page=${page}&limit=15`)
+  });
+
+  const changeView = (nextView: 'mine' | 'manage') => {
+    setPage(1);
+    setSearchParams(nextView === 'manage' ? { view: 'manage' } : {});
+  };
+  const refreshLeave = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['leave-requests'] });
+    await queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+  };
+
+  if (query.isPending) return <LoadingState label={view === 'manage' ? 'Loading employee leave requests…' : 'Loading leave records…'} />;
   if (query.isError) return <ErrorState message={query.error.message} onRetry={() => void query.refetch()} />;
-  return <><PageHeader eyebrow="SELF SERVICE" title="Leave" description="Submit leave requests and see their approval status in one place." actions={<button className="button" onClick={() => setOpen(true)}><CalendarPlus size={17} /> Apply for leave</button>} /><DataTable records={query.data.data} columns={leaveResource.columns} resource={leaveResource} total={query.data.pagination.total} onOpen={(record) => navigate(`/leave/${record.legacyId}`)} clickableRows /><LeaveDialog open={open} onClose={() => setOpen(false)} onApplied={async () => { await queryClient.invalidateQueries({ queryKey: ['my-leave'] }); }} /></>;
+
+  const result = query.data;
+  const resource = view === 'manage' ? managementResource : leaveResource;
+  return <>
+    <PageHeader
+      eyebrow={view === 'manage' ? 'PEOPLE OPERATIONS' : 'SELF SERVICE'}
+      title={view === 'manage' ? 'Leave management' : 'My leave'}
+      description={view === 'manage' ? 'Review company leave requests and record approval decisions.' : 'Submit leave requests and see their approval status in one place.'}
+      actions={<button className="button" type="button" onClick={() => setOpen(true)}><CalendarPlus size={17} /> Apply for leave</button>}
+    />
+    {canManage && <div className="leave-view-switch" role="tablist" aria-label="Leave workspace">
+      <button className={`button button--compact ${view === 'manage' ? '' : 'button--secondary'}`} type="button" role="tab" aria-selected={view === 'manage'} onClick={() => changeView('manage')}>Manage requests</button>
+      <button className={`button button--compact ${view === 'mine' ? '' : 'button--secondary'}`} type="button" role="tab" aria-selected={view === 'mine'} onClick={() => changeView('mine')}>My requests</button>
+    </div>}
+    {view === 'manage' && <div className="leave-management-toolbar">
+      <label className="field"><span>Request status</span><select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="pending">Pending review</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option><option value="all">All requests</option></select></label>
+      <span>{result.pagination.total} request{result.pagination.total === 1 ? '' : 's'}</span>
+    </div>}
+    <DataTable
+      records={result.data}
+      columns={resource.columns}
+      resource={resource}
+      page={result.pagination.page}
+      pages={result.pagination.pages}
+      total={result.pagination.total}
+      onPageChange={setPage}
+      onOpen={(record) => navigate(`/leave/${record.legacyId}${view === 'manage' ? '?view=manage' : ''}`)}
+      clickableRows
+      emptyTitle={view === 'manage' ? 'No leave requests in this status' : 'No leave requests yet'}
+    />
+    <LeaveDialog open={open} onClose={() => setOpen(false)} onApplied={refreshLeave} />
+  </>;
 }
 
 function LeaveDialog({ open, onClose, onApplied }: { open: boolean; onClose: () => void; onApplied: () => Promise<void> }) {

@@ -1,0 +1,14 @@
+.leave-view-switch { margin: 0 0 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+.leave-management-toolbar { margin: 0 0 13px; display: flex; align-items: end; justify-content: space-between; gap: 12px; }
+.leave-management-toolbar .field { min-width: 210px; }
+.leave-management-toolbar > span { padding-bottom: 10px; color: var(--text-muted, #748198); font-size: .76rem; }
+.leave-detail-review { padding: 0 0 17px; overflow: hidden; }
+.leave-detail-review .field { margin: 16px 18px 0; }
+.leave-detail-review .form-error { margin: 10px 18px 0; }
+.leave-review-actions { margin: 14px 18px 0; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 620px) {
+  .leave-management-toolbar { align-items: stretch; flex-direction: column; }
+  .leave-management-toolbar .field { width: 100%; }
+  .leave-management-toolbar > span { padding: 0; }
+  .leave-review-actions > .button { flex: 1 1 120px; }
+}

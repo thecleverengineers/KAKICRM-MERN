@@ -3,10 +3,9 @@ import multer from 'multer';
 import { z } from 'zod';
 import { toPublicRecord } from '../db/legacy.js';
 import { requireAuth } from '../middleware/auth.js';
-import { requirePermission } from '../middleware/rbac.js';
 import { createLegacyRecord, findLegacyRecord, listLegacyRecords, listRawRecords, updateLegacyRecord } from '../services/legacyRepository.js';
 import { toPublicRecordWithRelations } from '../services/relationLabels.js';
-import { can } from '../services/permissions.js';
+import { canManageLeave, canViewLeave } from '../services/permissions.js';
 import { persistIncomingFile } from '../services/storage.js';
 import { asyncHandler, HttpError } from '../utils/http.js';
 
@@ -32,7 +31,7 @@ leaveRouter.get('/mine', asyncHandler(async (req, res) => {
   res.json(result);
 }));
 
-leaveRouter.get('/manage', requirePermission('leave.view'), asyncHandler(async (req, res) => {
+leaveRouter.get('/manage', requireLeaveView, asyncHandler(async (req, res) => {
   const result = await listLegacyRecords('leave_requests', {
     page: positive(req.query.page, 1),
     limit: positive(req.query.limit, 100),
@@ -80,12 +79,12 @@ leaveRouter.get('/:leaveId', asyncHandler(async (req, res) => {
   const leave = await findLegacyRecord('leave_requests', identifier(req.params.leaveId));
   if (!leave) throw new HttpError(404, 'Leave request not found.');
   const isRequestOwner = Number(leave.raw.user_id) === req.auth!.legacyId;
-  const canReviewLeave = can(req.auth!, 'leave.view') || can(req.auth!, 'leave.manage');
+  const canReviewLeave = canViewLeave(req.auth!);
   if (!isRequestOwner && !canReviewLeave) throw new HttpError(404, 'Leave request not found.');
   res.json({ data: await toPublicRecordWithRelations('leave_requests', leave) });
 }));
 
-leaveRouter.patch('/:leaveId/review', requirePermission('leave.manage'), asyncHandler(async (req, res) => {
+leaveRouter.patch('/:leaveId/review', requireLeaveManager, asyncHandler(async (req, res) => {
   const input = z.object({ status: z.enum(['approved', 'rejected']), note: z.string().max(2_000).optional().nullable() }).parse(req.body);
   const leave = await findLegacyRecord('leave_requests', identifier(req.params.leaveId));
   if (!leave) throw new HttpError(404, 'Leave request not found.');
@@ -164,4 +163,14 @@ function nowIst(): string {
   const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const time = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(new Date());
   return `${date} ${time}`;
+}
+
+function requireLeaveView(req: import('express').Request, res: import('express').Response, next: import('express').NextFunction): void {
+  if (req.auth && canViewLeave(req.auth)) { next(); return; }
+  res.status(req.auth ? 403 : 401).json({ error: req.auth ? 'You do not have permission to manage leave requests.' : 'Authentication is required.' });
+}
+
+function requireLeaveManager(req: import('express').Request, res: import('express').Response, next: import('express').NextFunction): void {
+  if (req.auth && canManageLeave(req.auth)) { next(); return; }
+  res.status(req.auth ? 403 : 401).json({ error: req.auth ? 'You do not have permission to review leave requests.' : 'Authentication is required.' });
 }

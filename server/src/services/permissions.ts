@@ -96,7 +96,15 @@ export function isCeoRole(context: Pick<AuthContext, 'role'>): boolean {
  * permission link has not been migrated for the HR account yet. */
 export function isAdminOrHrRole(context: Pick<AuthContext, 'role'>): boolean {
   const role = context.role.trim().toLowerCase().replace(/[\s-]+/g, '_');
-  return ['admin', 'hr', 'hr_manager', 'human_resources', 'human_resource'].includes(role);
+  return ['admin', 'administrator', 'hr', 'hr_manager', 'human_resources', 'human_resource'].includes(role);
+}
+
+export function canManageLeave(context: AuthContext): boolean {
+  return isAdminOrHrRole(context) || isCeoRole(context) || can(context, 'leave.manage');
+}
+
+export function canViewLeave(context: AuthContext): boolean {
+  return canManageLeave(context) || can(context, 'leave.view');
 }
 
 export function canManageInvoiceSettlement(context: AuthContext): boolean {

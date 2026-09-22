@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { type LegacyRecord } from '../db/legacy.js';
 import { requireAuth, requireWhatsAppNumber } from '../middleware/auth.js';
 import { emitRealtime } from '../realtime.js';
-import { can, isEmployeeRole, type AuthContext } from '../services/permissions.js';
+import { can, canManageLeave, canViewLeave, isEmployeeRole, type AuthContext } from '../services/permissions.js';
 import { taskVisibilityScopeWithRelationships } from '../services/taskAccess.js';
 import {
   archiveLegacyRecord,
@@ -188,7 +188,7 @@ async function dashboardMetrics(auth: NonNullable<import('express').Request['aut
   if (can(auth, 'billing.view') || can(auth, 'billing.manage')) {
     authorisedCounts.push(countLegacyRecords('invoices', { 'raw.status': { $in: ['draft', 'sent', 'partial', 'overdue'] } }).then((value) => ({ key: 'invoices', label: 'Open invoices', value, tone: 'amber' })));
   }
-  if (can(auth, 'leave.view') || can(auth, 'leave.manage')) {
+  if (canViewLeave(auth)) {
     authorisedCounts.push(countLegacyRecords('leave_requests', { 'raw.status': 'pending' }).then((value) => ({ key: 'leave', label: 'Leave requests', value, tone: 'rose' })));
   }
   if (can(auth, 'attendance.view') || can(auth, 'attendance.manage')) {
@@ -213,7 +213,7 @@ function quickActionsFor(auth: NonNullable<import('express').Request['auth']>): 
   }
   if (can(auth, 'billing.manage')) actions.push({ id: 'new-invoice', label: 'Create invoice', description: 'Prepare a branded client invoice.', to: '/invoices?new=1', icon: 'invoice-plus', tone: 'amber' });
   else if (can(auth, 'billing.view')) actions.push({ id: 'invoices', label: 'Invoices', description: 'Review client invoices and payments.', to: '/invoices', icon: 'invoices', tone: 'amber' });
-  if (can(auth, 'leave.manage')) actions.push({ id: 'leave', label: 'Review leave', description: 'Act on pending leave requests.', to: '/leave', icon: 'leave', tone: 'rose' });
+  if (canManageLeave(auth)) actions.push({ id: 'leave', label: 'Review leave', description: 'Review and decide employee leave requests.', to: '/leave?view=manage', icon: 'leave', tone: 'rose' });
   if (can(auth, 'employees.manage')) actions.push({ id: 'people', label: 'Manage people', description: 'Maintain employee information.', to: '/data/users', icon: 'people', tone: 'blue' });
   if (can(auth, 'rbac.manage')) actions.push({ id: 'branding', label: 'Brand settings', description: 'Update title, logo and invoice design.', to: '/settings/branding', icon: 'branding', tone: 'violet' });
 
