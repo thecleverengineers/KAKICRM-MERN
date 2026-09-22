@@ -3,6 +3,7 @@ import { AppShell, ProtectedScreen } from './components/AppShell.js';
 import { ArchivePage } from './pages/ArchivePage.js';
 import { AttendancePage } from './pages/AttendancePage.js';
 import { BrandingSettingsPage } from './pages/BrandingSettingsPage.js';
+import { WhatsAppBusinessSettingsPage } from './pages/WhatsAppBusinessSettingsPage.js';
 import { BackupRestorePage } from './pages/BackupRestorePage.js';
 import { CalendarPage } from './pages/CalendarPage.js';
 import { ClaraControlCentrePage } from './pages/ClaraControlCentrePage.js';
@@ -90,6 +91,7 @@ export function App() {
       <Route path="/archive" element={<ArchivePage />} />
       <Route path="/settings/branding" element={<BrandingSettingsPage />} />
       <Route path="/settings/site" element={<BrandingSettingsPage />} />
+      <Route path="/settings/whatsapp-business" element={<WhatsAppBusinessSettingsPage />} />
       <Route path="/admin/backups" element={<BackupRestorePage />} />
       <Route path="/admin/clara" element={<ClaraControlCentrePage />} />
       <Route path="/data/:resourceId/:recordId" element={<RecordDetailPage />} />

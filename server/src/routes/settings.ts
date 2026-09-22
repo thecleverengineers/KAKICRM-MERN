@@ -1,11 +1,13 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import multer from 'multer';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
 import { createLegacyRecord, listRawRecords, updateLegacyRecord } from '../services/legacyRepository.js';
 import { can } from '../services/permissions.js';
 import { persistIncomingFile, storedAssetUrl } from '../services/storage.js';
 import { clearFast2SmsWhatsAppApiKey, readFast2SmsWhatsAppStatus, saveFast2SmsWhatsAppApiKey } from '../services/fast2smsSettings.js';
+import { connectWhatsAppBusiness, disconnectWhatsAppBusiness, readWhatsAppBusinessStatus, verifySavedWhatsAppBusinessConnection } from '../services/whatsappBusinessSettings.js';
 import { asyncHandler, HttpError } from '../utils/http.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
@@ -50,6 +52,11 @@ const brandingSchema = z.object({
 const fast2SmsCredentialSchema = z.object({
   apiKey: z.string().trim().min(8, 'Enter a valid Fast2SMS authorization key.').max(1_000)
 });
+const whatsAppBusinessCredentialSchema = z.object({
+  accessToken: z.string().trim().min(20, 'Enter the Meta system-user access token.').max(4_096),
+  phoneNumberId: z.string().trim().regex(/^\\d{5,32}$/, 'Enter the numeric WhatsApp Business phone number ID.')
+});
+const whatsAppConnectLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false });
 
 export const settingsRouter = Router();
 
@@ -98,6 +105,25 @@ settingsRouter.delete('/integrations/fast2sms-whatsapp', requireAuth, requireAdm
   res.json({ data: await clearFast2SmsWhatsAppApiKey(req.auth!.legacyId) });
 }));
 
+// Meta credentials are write-only from the browser. Status responses contain
+// only verified business display details, never the token or phone-number ID.
+settingsRouter.get('/integrations/whatsapp-business', requireAuth, requireWhatsAppBusinessManage, asyncHandler(async (_req, res) => {
+  res.json({ data: await readWhatsAppBusinessStatus() });
+}));
+
+settingsRouter.put('/integrations/whatsapp-business', requireAuth, requireWhatsAppBusinessManage, whatsAppConnectLimiter, asyncHandler(async (req, res) => {
+  const input = whatsAppBusinessCredentialSchema.parse(req.body);
+  res.json({ data: await connectWhatsAppBusiness(input.accessToken, input.phoneNumberId, req.auth!.legacyId) });
+}));
+
+settingsRouter.post('/integrations/whatsapp-business/verify', requireAuth, requireWhatsAppBusinessManage, whatsAppConnectLimiter, asyncHandler(async (req, res) => {
+  res.json({ data: await verifySavedWhatsAppBusinessConnection(req.auth!.legacyId) });
+}));
+
+settingsRouter.delete('/integrations/whatsapp-business', requireAuth, requireWhatsAppBusinessManage, asyncHandler(async (req, res) => {
+  res.json({ data: await disconnectWhatsAppBusiness(req.auth!.legacyId) });
+}));
+
 function requireBrandingManage(req: Request, res: Response, next: NextFunction): void {
   if (!req.auth) {
     res.status(401).json({ error: 'Authentication is required.' });
@@ -105,6 +131,19 @@ function requireBrandingManage(req: Request, res: Response, next: NextFunction):
   }
   if (!can(req.auth, 'rbac.manage')) {
     res.status(403).json({ error: 'Only administrators can change organisation branding.' });
+    return;
+  }
+  next();
+}
+
+function requireWhatsAppBusinessManage(req: Request, res: Response, next: NextFunction): void {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Authentication is required.' });
+    return;
+  }
+  const role = String(req.auth.role).trim().toLowerCase().replace(/[\\s-]+/g, '_');
+  if (!['admin', 'administrator', 'hr', 'hr_manager', 'human_resources', 'human_resource', 'ceo', 'chief_executive_officer', 'chief_executive'].includes(role)) {
+    res.status(403).json({ error: 'Only an administrator, HR, or CEO can manage the WhatsApp Business connection.' });
     return;
   }
   next();
