@@ -38,6 +38,9 @@ export function TasksPage() {
   const { user, hasPermission } = useAuth();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [suggestionTerm, setSuggestionTerm] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<number[]>([]);
   const [recycleConfirmOpen, setRecycleConfirmOpen] = useState(false);
@@ -47,6 +50,15 @@ export function TasksPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [activeStatus, setActiveStatus] = useState<TaskStatusFilter>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | TaskPriority>('all');
+  useEffect(() => {
+    const term = searchInput.trim();
+    if (term.length < 2) {
+      setSuggestionTerm('');
+      return;
+    }
+    const timer = window.setTimeout(() => setSuggestionTerm(term), 350);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
   const canManage = hasPermission('task.manage');
   const isEmployee = user?.role?.trim().toLowerCase() === 'employee';
   const canCreate = canManage || isEmployee;
@@ -73,6 +85,25 @@ export function TasksPage() {
       ...(priorityFilter !== 'all' ? { priority: priorityFilter } : {})
     })}`)
   });
+  const suggestionsQuery = useQuery({
+    queryKey: ['task-suggestions', suggestionTerm, activeStatus, priorityFilter],
+    enabled: searchOpen && suggestionTerm.length >= 1,
+    staleTime: 30_000,
+    queryFn: () => api<Paginated<PublicRecord>>(`/tasks${queryString({
+      page: 1,
+      limit: 6,
+      search: suggestionTerm,
+      ...(activeStatus !== 'all' ? { status: activeStatus } : {}),
+      ...(priorityFilter !== 'all' ? { priority: priorityFilter } : {})
+    })}`)
+  });
+  const applySearch = (value = searchInput) => {
+    const nextSearch = value.trim();
+    setSearchInput(nextSearch);
+    setSearch(nextSearch);
+    setPage(1);
+    setSearchOpen(false);
+  };
   if (query.isPending) return <LoadingState label="Loading tasks…" />;
   if (query.isError) return <ErrorState message={query.error.message} onRetry={() => void query.refetch()} />;
 
@@ -120,7 +151,23 @@ export function TasksPage() {
       {taskStatusTabs.map((tab) => <button className={activeStatus === tab.id ? 'task-status-tab is-active' : 'task-status-tab'} key={tab.id} type="button" role="tab" aria-selected={activeStatus === tab.id} onClick={() => { setActiveStatus(tab.id); setPage(1); }}>{tab.label}</button>)}
     </div>
     <div className="toolbar task-toolbar task-toolbar--records">
-      <label className="search-box"><Search size={17} /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search tasks…" /></label>
+      <div className="task-search-area" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setSearchOpen(false); }}>
+        <form className="task-search-form" onSubmit={(event) => { event.preventDefault(); applySearch(); }}>
+          <label className="search-box"><Search size={17} /><input value={searchInput} onFocus={() => setSearchOpen(true)} onChange={(event) => { setSearchInput(event.target.value); setSearchOpen(true); }} placeholder="Search tasks…" aria-label="Search tasks" aria-autocomplete="list" aria-expanded={searchOpen} /></label>
+          <button className="button button--secondary button--compact task-search-submit" type="submit">Search</button>
+        </form>
+        {searchOpen && searchInput.trim().length >= 1 && <div className="task-search-suggestions" role="listbox" aria-label="Task suggestions">
+          {suggestionTerm !== searchInput.trim() || suggestionsQuery.isFetching ? <p className="task-search-message">Finding suggestions…</p> : suggestionsQuery.data?.data.length ? suggestionsQuery.data.data.map((record) => {
+            const title = String(record.fields.title ?? 'Untitled task');
+            const taskId = record.legacyId;
+            return <button className="task-search-suggestion" type="button" role="option" aria-selected="false" key={record.id} onClick={() => { setSearchOpen(false); if (taskId) navigate('/tasks/' + taskId); }}>
+              <span className="task-search-suggestion__title">{title}</span>
+              <span className="task-search-suggestion__meta">{String(record.fields.status ?? 'pending').replace(/_/g, ' ')} · {String(record.fields.priority ?? 'normal')} priority</span>
+            </button>;
+          }) : <p className="task-search-message">No matching tasks found.</p>}
+          <button className="task-search-all" type="button" onClick={() => applySearch()}>Show all results for “{searchInput.trim()}”</button>
+        </div>}
+      </div>
       <label className="task-priority-filter"><span>Priority</span><select value={priorityFilter} onChange={(event) => { setPriorityFilter(event.target.value as 'all' | TaskPriority); setPage(1); }} aria-label="Filter tasks by priority"><option value="all">All priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label>
       <div className="task-toolbar-actions">{canManage && selectedTaskIds.length > 0 && <><span className="task-selection-count">{selectedTaskIds.length} selected</span><button className="button button--danger button--compact" type="button" onClick={() => { setRecycleError(null); setRecycleConfirmOpen(true); }}><Trash2 size={16} /> Move to recycle</button><button className="text-button" type="button" onClick={() => setSelectedTaskIds([])}>Clear</button></>}{query.data.pagination.total} {isEmployee ? 'in your work circle' : 'visible to you'}</div>
     </div>
