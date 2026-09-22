@@ -54,7 +54,7 @@ const fast2SmsCredentialSchema = z.object({
 });
 const whatsAppBusinessCredentialSchema = z.object({
   accessToken: z.string().trim().min(20, 'Enter the Meta system-user access token.').max(4_096),
-  phoneNumberId: z.string().trim().regex(/^\\d{5,32}$/, 'Enter the numeric WhatsApp Business phone number ID.')
+  phoneNumberId: z.string().trim().regex(/^\d{5,32}$/, 'Enter the numeric WhatsApp Business phone number ID.')
 });
 const whatsAppConnectLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false });
 
@@ -141,7 +141,7 @@ function requireWhatsAppBusinessManage(req: Request, res: Response, next: NextFu
     res.status(401).json({ error: 'Authentication is required.' });
     return;
   }
-  const role = String(req.auth.role).trim().toLowerCase().replace(/[\\s-]+/g, '_');
+  const role = String(req.auth.role).trim().toLowerCase().replace(/[\s-]+/g, '_');
   if (!['admin', 'administrator', 'hr', 'hr_manager', 'human_resources', 'human_resource', 'ceo', 'chief_executive_officer', 'chief_executive'].includes(role)) {
     res.status(403).json({ error: 'Only an administrator, HR, or CEO can manage the WhatsApp Business connection.' });
     return;

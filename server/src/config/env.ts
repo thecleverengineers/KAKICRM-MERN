@@ -48,7 +48,7 @@ const schema = z.object({
   CREDENTIAL_VAULT_ENCRYPTION_SECRET: optionalEnvText,
   // Dedicated, stable key for server-managed WhatsApp Business credentials.
   WHATSAPP_BUSINESS_ENCRYPTION_SECRET: optionalEnvText,
-  WHATSAPP_GRAPH_API_VERSION: z.string().trim().regex(/^v\\d+\\.0$/).default('v25.0'),
+  WHATSAPP_GRAPH_API_VERSION: z.string().trim().regex(/^v\d+\.0$/).default('v25.0'),
   // Browser push notification credentials. Keep the private key only in the
   // Render environment; the public key is safe to expose to authenticated
   // clients when they opt in.
