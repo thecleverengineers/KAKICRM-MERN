@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Search } from 'lucide-react';
 import '../styles/search-autocomplete.css';
 
@@ -47,18 +47,35 @@ export function SearchAutocomplete<T>({
   const [open, setOpen] = useState(false);
   const listboxId = useId().replaceAll(':', '');
   const term = value.trim();
-  const onFormSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const submitSearch = () => {
     setOpen(false);
     onSubmit();
   };
+
   return <div className={`search-autocomplete ${className}`} onBlur={(event) => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
   }}>
-    <form className="search-autocomplete__form" role="search" onSubmit={onFormSubmit}>
-      <label className="search-box"><Search size={17} /><input value={value} onFocus={() => setOpen(true)} onChange={(event) => { onChange(event.target.value); setOpen(true); }} placeholder={placeholder} aria-label={placeholder} aria-autocomplete="list" aria-expanded={open && term.length > 0} aria-controls={listboxId} autoComplete="off" /></label>
-      <button className="button button--secondary button--compact search-autocomplete__submit" type="submit">Search</button>
-    </form>
+    <div className="search-autocomplete__form" role="search">
+      <label className="search-box"><Search size={17} /><input
+        value={value}
+        onFocus={() => setOpen(true)}
+        onChange={(event) => { onChange(event.target.value); setOpen(true); }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            event.stopPropagation();
+            submitSearch();
+          }
+        }}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        aria-autocomplete="list"
+        aria-expanded={open && term.length > 0}
+        aria-controls={listboxId}
+        autoComplete="off"
+      /></label>
+      <button className="button button--secondary button--compact search-autocomplete__submit" type="button" onClick={submitSearch}>Search</button>
+    </div>
     {open && term.length > 0 && <div className="search-autocomplete__suggestions" role="listbox" id={listboxId}>
       {loading && <p className="search-autocomplete__message">Finding suggestions…</p>}
       {!loading && error && <p className="search-autocomplete__message">Suggestions are temporarily unavailable.</p>}
@@ -69,7 +86,7 @@ export function SearchAutocomplete<T>({
           <strong>{getLabel(item)}</strong>{detail ? <small>{detail}</small> : null}
         </button>;
       })}
-      <button className="search-autocomplete__all" type="button" onClick={() => { setOpen(false); onSubmit(); }}>{searchActionLabel(term)}</button>
+      <button className="search-autocomplete__all" type="button" onClick={submitSearch}>{searchActionLabel(term)}</button>
     </div>}
   </div>;
 }
