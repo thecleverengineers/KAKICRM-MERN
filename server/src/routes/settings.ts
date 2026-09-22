@@ -83,6 +83,7 @@ const whatsAppCampaignSchema = z.object({
   allRecipientsOptedIn: z.literal(true)
 });
 const whatsAppConnectLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false });
+const whatsAppCampaignSendLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: 'draft-8', legacyHeaders: false });
 
 export const settingsRouter = Router();
 
