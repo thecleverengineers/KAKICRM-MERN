@@ -12,6 +12,7 @@ import {
   CircleCheck,
   FilePlus2,
   ListTodo,
+  LockKeyhole,
   LoaderCircle,
   LogIn,
   LogOut,
@@ -83,7 +84,8 @@ const actionIcons: Record<string, typeof ListTodo> = {
   invoices: ReceiptText,
   leave: CheckSquare,
   people: UserRoundCog,
-  branding: Palette
+  branding: Palette,
+  credentialVault: LockKeyhole
 };
 
 export function DashboardPage() {
@@ -116,6 +118,10 @@ export function DashboardPage() {
   if (query.isPending) return <LoadingState label="Preparing your dashboard…" />;
   if (query.isError) return <ErrorState message={query.error.message} onRetry={() => void query.refetch()} />;
   const summary = query.data;
+  const quickActions = [
+    ...summary.quickActions.filter((action) => action.id !== 'credential-vault'),
+    { id: 'credential-vault', label: 'Credential Vault', description: 'Unlock and manage securely shared sign-ins.', to: '/credential-vault', icon: 'credentialVault', tone: 'violet' }
+  ];
 
   const refreshWorkNotes = async () => {
     await queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
@@ -187,7 +193,7 @@ export function DashboardPage() {
     {!!summary.quickActions.length && <section className="dashboard-actions-section">
       <div className="card-heading"><div><p className="eyebrow">QUICK ACTIONS</p><h2>Continue where you need to</h2></div></div>
       <div className="dashboard-actions">
-        {summary.quickActions.map((action) => {
+        {quickActions.map((action) => {
           const Icon = actionIcons[action.icon] ?? ShieldCheck;
           return <button key={action.id} className={`dashboard-action dashboard-action--${action.tone}`} onClick={() => navigate(action.to)}>
             <span className="dashboard-action-icon"><Icon size={20} /></span>

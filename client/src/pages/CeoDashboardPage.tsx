@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, BarChart3, BriefcaseBusiness, CalendarClock, CheckCircle2, ClipboardCheck, Crown, FileDown, IndianRupee, UsersRound } from 'lucide-react';
+import { ArrowRight, BarChart3, BriefcaseBusiness, CalendarClock, CheckCircle2, ClipboardCheck, Crown, FileDown, IndianRupee, KeyRound, UsersRound } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { ErrorState, LoadingState } from '../components/LoadingState.js';
 import { PageHeader } from '../components/PageHeader.js';
@@ -50,7 +50,7 @@ export function CeoDashboardPage() {
   if (query.isError) return <ErrorState message={query.error.message} onRetry={() => void query.refetch()} />;
   const summary = query.data;
   return <>
-    <PageHeader eyebrow="EXECUTIVE COMMAND · KAKIVI CHISHI" title="CEO Command Dashboard" description="A company-wide view of financial health, delivery risk, workforce capacity and decisions awaiting you." actions={<div className="ceo-header-actions"><button className="button button--secondary" onClick={() => navigate('/ceo/approvals')}><ClipboardCheck size={16} /> Approval centre{summary.approvals.pending ? ` (${summary.approvals.pending})` : ''}</button><button className="button" onClick={() => navigate('/ceo/workspace')}><Crown size={16} /> Private workspace</button></div>} />
+    <PageHeader eyebrow="EXECUTIVE COMMAND · KAKIVI CHISHI" title="CEO Command Dashboard" description="A company-wide view of financial health, delivery risk, workforce capacity and decisions awaiting you." actions={<div className="ceo-header-actions"><button className="button button--secondary" onClick={() => navigate('/credential-vault')}><KeyRound size={16} /> Credential Vault</button><button className="button button--secondary" onClick={() => navigate('/ceo/approvals')}><ClipboardCheck size={16} /> Approval centre{summary.approvals.pending ? ` (${summary.approvals.pending})` : ''}</button><button className="button" onClick={() => navigate('/ceo/workspace')}><Crown size={16} /> Private workspace</button></div>} />
     <section className="ceo-filter-card content-card">
       <div className="card-heading"><div><p className="eyebrow">EXECUTIVE FILTERS</p><h2>Focus the company view</h2></div><span className="ceo-data-stamp">Facts through {ceoDate(summary.generatedAt)}</span></div>
       <div className="ceo-filter-grid">

@@ -14,6 +14,7 @@ import { CeoIntelligencePage } from './pages/CeoIntelligencePage.js';
 import { CeoSettingsPage } from './pages/CeoSettingsPage.js';
 import { CeoWorkspacePage } from './pages/CeoWorkspacePage.js';
 import { DashboardPage } from './pages/DashboardPage.js';
+import { CredentialVaultPage } from './pages/CredentialVaultPage.js';
 import { EntityPage } from './pages/EntityPage.js';
 import { InvoiceDetailPage } from './pages/InvoiceDetailPage.js';
 import { InvoicesPage } from './pages/InvoicesPage.js';
@@ -60,6 +61,7 @@ export function App() {
       <Route path="/ceo/workspace" element={<CeoWorkspacePage />} />
       <Route path="/ceo/audit" element={<CeoAuditPage />} />
       <Route path="/tasks" element={<TasksPage />} />
+      <Route path="/credential-vault" element={<CredentialVaultPage />} />
       <Route path="/tasks/:taskId" element={<TaskDetailPage />} />
       <Route path="/projects" element={<ProjectsPage />} />
       <Route path="/projects/departments/:departmentId" element={<DepartmentProjectsPage />} />

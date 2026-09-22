@@ -72,6 +72,20 @@ FAST2SMS_WHATSAPP_API_KEY=your_fast2sms_authorization_key
 
 The request uses `GET https://www.fast2sms.com/dev/whatsapp` with `message_id=30840`, `phone_number_id=1202480702956271`, the assigned user's mobile number, and exactly six pipe-separated variable values: assigned by, title, description, status, priority and due date. No media or document attachment is sent.
 
+## Credential Vault
+
+The protected **Credential Vault** is available from the sidebar and dashboard quick actions. Each user sets a personal six-digit code before first use. Credentials and private notes are encrypted with AES-256-GCM before they are stored in MongoDB; the code is stored as a bcrypt hash. Vault sessions expire after 15 minutes, lock after repeated incorrect codes, and are revoked when the code changes. Decrypted vault data is cleared from the browser query cache when the vault is locked or the page is left.
+
+Credential owners can add, edit, delete and selectively share their own entries with active staff, managers, HR, the CEO or administrators. Recipients must unlock their own vault to view a shared entry. They cannot change or re-share another user's credential, and the owner can remove access at any time.
+
+Set a dedicated, stable encryption secret in the production environment before saving production credentials:
+
+```dotenv
+CREDENTIAL_VAULT_ENCRYPTION_SECRET=<long-random-secret-kept-outside-the-repository>
+```
+
+Keep the secret unchanged across deployments and backups. The application falls back to `SETTINGS_ENCRYPTION_SECRET`, then `JWT_ACCESS_SECRET`, only if the dedicated secret is absent. Changing the active encryption secret makes existing vault entries unreadable.
+
 ## Employee task workspace
 
 Every employee can create a task for their own workflow from **Tasks**. The

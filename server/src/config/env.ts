@@ -43,6 +43,9 @@ const schema = z.object({
   // credentials. When omitted, the JWT access secret is used as a backwards-
   // compatible fallback. Keep this value stable after credentials are saved.
   SETTINGS_ENCRYPTION_SECRET: optionalEnvText,
+  // Keep this secret stable so saved credential values remain decryptable
+  // after application deployments and token secret rotations.
+  CREDENTIAL_VAULT_ENCRYPTION_SECRET: optionalEnvText,
   // Browser push notification credentials. Keep the private key only in the
   // Render environment; the public key is safe to expose to authenticated
   // clients when they opt in.
