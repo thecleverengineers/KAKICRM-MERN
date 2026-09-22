@@ -6,7 +6,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { createLegacyRecord, findLegacyRecord, listLegacyRecords, listRawRecords, updateLegacyRecord } from '../services/legacyRepository.js';
 import { toPublicRecordWithRelations } from '../services/relationLabels.js';
 import { canManageLeave, canViewLeave } from '../services/permissions.js';
-import { persistIncomingFile } from '../services/storage.js';
+import { openStoredFile, persistIncomingFile } from '../services/storage.js';
 import { asyncHandler, HttpError } from '../utils/http.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 10 } });
@@ -47,6 +47,11 @@ leaveRouter.get('/manage', requireLeaveView, asyncHandler(async (req, res) => {
 leaveRouter.post('/apply', upload.array('files', 10), asyncHandler(async (req, res) => {
   const input = requestSchema.parse(req.body);
   if (input.end_date < input.start_date) throw new HttpError(400, 'The end date must be on or after the start date.');
+  const files = Array.isArray(req.files) ? req.files : [];
+  if (!files.length) throw new HttpError(400, 'Upload at least one proof document before submitting your leave request.');
+  if (files.some((file) => !allowedProofFile(file))) {
+    throw new HttpError(400, 'Proof files must be PDF, JPG, PNG, or WebP documents.');
+  }
   const request = await createLegacyRecord('leave_requests', {
     user_id: req.auth!.legacyId,
     leave_type: input.leave_type,
@@ -60,7 +65,6 @@ leaveRouter.post('/apply', upload.array('files', 10), asyncHandler(async (req, r
     reviewed_at: null,
     review_note: null
   });
-  const files = Array.isArray(req.files) ? req.files : [];
   const attachments = await Promise.all(files.map(async (file) => {
     const saved = await persistIncomingFile(file, 'leave-proofs');
     return createLegacyRecord('leave_request_files', {
@@ -75,12 +79,35 @@ leaveRouter.post('/apply', upload.array('files', 10), asyncHandler(async (req, r
   res.status(201).json({ data: toPublicRecord(request), attachments: attachments.map(toPublicRecord) });
 }));
 
+leaveRouter.get('/:leaveId/files', asyncHandler(async (req, res) => {
+  const leave = await accessibleLeave(req, identifier(req.params.leaveId));
+  const files = await listRawRecords('leave_request_files', { 'raw.leave_id': leave.legacyId }, 100);
+  res.json({ data: files.map((file) => ({
+    legacyId: file.legacyId,
+    name: String(file.raw.original_name ?? 'Proof document'),
+    mime: String(file.raw.mime ?? 'application/octet-stream'),
+    sizeBytes: Number(file.raw.size_bytes ?? 0),
+    createdAt: String(file.raw.created_at ?? file.createdAt)
+  })) });
+}));
+
+leaveRouter.get('/:leaveId/files/:fileId', asyncHandler(async (req, res) => {
+  const leave = await accessibleLeave(req, identifier(req.params.leaveId));
+  const file = await findLegacyRecord('leave_request_files', identifier(req.params.fileId));
+  if (!file || Number(file.raw.leave_id) !== leave.legacyId) throw new HttpError(404, 'Leave proof document not found.');
+  const { stream } = await openStoredFile(String(file.raw.stored_name ?? ''));
+  const fileName = String(file.raw.original_name ?? 'proof-document').replace(/[\r\n"]/g, '');
+  const mime = allowedProofMimeTypes.has(String(file.raw.mime).toLowerCase()) ? String(file.raw.mime).toLowerCase() : 'application/octet-stream';
+  const inline = mime === 'application/pdf' || mime.startsWith('image/');
+  res.setHeader('Content-Type', mime);
+  res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="${fileName || 'proof-document'}"`);
+  res.setHeader('Cache-Control', 'private, max-age=300');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  stream.pipe(res);
+}));
+
 leaveRouter.get('/:leaveId', asyncHandler(async (req, res) => {
-  const leave = await findLegacyRecord('leave_requests', identifier(req.params.leaveId));
-  if (!leave) throw new HttpError(404, 'Leave request not found.');
-  const isRequestOwner = Number(leave.raw.user_id) === req.auth!.legacyId;
-  const canReviewLeave = canViewLeave(req.auth!);
-  if (!isRequestOwner && !canReviewLeave) throw new HttpError(404, 'Leave request not found.');
+  const leave = await accessibleLeave(req, identifier(req.params.leaveId));
   res.json({ data: await toPublicRecordWithRelations('leave_requests', leave) });
 }));
 
@@ -157,6 +184,20 @@ function identifier(value: string | string[] | undefined): number {
 function positive(value: unknown, fallback: number): number {
   const result = Number(value);
   return Number.isFinite(result) && result > 0 ? Math.floor(result) : fallback;
+}
+
+const allowedProofMimeTypes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
+
+function allowedProofFile(file: Express.Multer.File): boolean {
+  return allowedProofMimeTypes.has(file.mimetype.toLowerCase());
+}
+
+async function accessibleLeave(req: import('express').Request, id: number) {
+  const leave = await findLegacyRecord('leave_requests', id);
+  if (!leave) throw new HttpError(404, 'Leave request not found.');
+  const isRequestOwner = Number(leave.raw.user_id) === req.auth!.legacyId;
+  if (!isRequestOwner && !canViewLeave(req.auth!)) throw new HttpError(404, 'Leave request not found.');
+  return leave;
 }
 
 function nowIst(): string {
