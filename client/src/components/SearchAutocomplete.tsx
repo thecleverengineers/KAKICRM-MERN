@@ -63,9 +63,12 @@ export function SearchAutocomplete<T>({
       {loading && <p className="search-autocomplete__message">Finding suggestions…</p>}
       {!loading && error && <p className="search-autocomplete__message">Suggestions are temporarily unavailable.</p>}
       {!loading && !error && !suggestions.length && <p className="search-autocomplete__message">{noResultsLabel}</p>}
-      {!loading && !error && suggestions.map((item) => <button className="search-autocomplete__option" type="button" role="option" aria-selected="false" key={getKey(item)} onClick={() => { setOpen(false); onSelect(item); }}>
-        <strong>{getLabel(item)}</strong>{getDetail?.(item) && <small>{getDetail(item)}</small>}
-      </button>)}
+      {!loading && !error && suggestions.map((item) => {
+        const detail = getDetail?.(item);
+        return <button className="search-autocomplete__option" type="button" role="option" aria-selected="false" key={getKey(item)} onClick={() => { setOpen(false); onSelect(item); }}>
+          <strong>{getLabel(item)}</strong>{detail ? <small>{detail}</small> : null}
+        </button>;
+      })}
       <button className="search-autocomplete__all" type="button" onClick={() => { setOpen(false); onSubmit(); }}>{searchActionLabel(term)}</button>
     </div>}
   </div>;
