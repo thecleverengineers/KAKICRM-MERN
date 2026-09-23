@@ -10,6 +10,7 @@ import {
   createLegacyRecord,
   findLegacyRecord,
   listLegacyRecords,
+  TASK_WORKFLOW_SORT,
   updateLegacyRecord
 } from '../services/legacyRepository.js';
 import {
@@ -69,7 +70,9 @@ recordsRouter.get('/:collection', asyncHandler(async (req, res) => {
     search: stringQuery(req.query.search),
     searchFields: csvQuery(req.query.searchFields),
     searchMode: req.query.searchMode === 'any' ? 'any' : 'all',
-    sort: stringQuery(req.query.sort),
+    sort: collection === 'tasks' && !stringQuery(req.query.sort)
+      ? TASK_WORKFLOW_SORT
+      : stringQuery(req.query.sort),
     order: req.query.order === 'asc' ? 'asc' : 'desc',
     filters,
     includeArchived: (req.auth?.permissions.includes('*') || isCeoRole(req.auth!)) && req.query.includeArchived === 'true',

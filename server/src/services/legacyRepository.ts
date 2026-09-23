@@ -1,4 +1,4 @@
-import { type FilterQuery, type Model } from 'mongoose';
+import { type FilterQuery, type Model, type PipelineStage } from 'mongoose';
 import {
   assertLegacyCollection,
   getLegacyModel,
@@ -26,6 +26,9 @@ export interface ListOptions {
   archivedOnly?: boolean;
 }
 
+/** Sort key used by task lists to keep the workflow order stable across pages. */
+export const TASK_WORKFLOW_SORT = '__task_workflow__';
+
 export interface PagedRecords {
   data: PublicLegacyRecord[];
   pagination: { page: number; limit: number; total: number; pages: number };
@@ -36,11 +39,20 @@ export async function listLegacyRecords(collection: LegacyCollection, options: L
   const page = Math.max(1, options.page ?? 1);
   const limit = Math.min(100, Math.max(1, options.limit ?? 25));
   const query = buildQuery(options);
+  const workflowSort = collection === 'tasks' && options.sort === TASK_WORKFLOW_SORT;
   const sortField = normalizeField(options.sort) ? `raw.${options.sort}` : 'updatedAt';
   const direction = options.order === 'asc' ? 1 : -1;
 
   const [rows, total] = await Promise.all([
-    model.find(query).sort({ [sortField]: direction, legacyId: -1 }).skip((page - 1) * limit).limit(limit).lean<LegacyRecord[]>(),
+    workflowSort
+      ? model.aggregate<LegacyRecord>([
+        { $match: query },
+        ...taskWorkflowSortStages('due_date'),
+        { $skip: (page - 1) * limit },
+        { $limit: limit },
+        { $project: { __taskStatusRank: 0, __taskPriorityRank: 0 } }
+      ])
+      : model.find(query).sort({ [sortField]: direction, legacyId: -1 }).skip((page - 1) * limit).limit(limit).lean<LegacyRecord[]>(),
     model.countDocuments(query)
   ]);
 
@@ -176,6 +188,14 @@ export async function listRawRecords(
   filter: FilterQuery<LegacyRecord> = {},
   limit = 200
 ): Promise<LegacyRecord[]> {
+  if (collection === 'tasks') {
+    return getLegacyModel(collection).aggregate<LegacyRecord>([
+      { $match: { archivedAt: { $exists: false }, ...filter } },
+      ...taskWorkflowSortStages('legacy_id'),
+      { $limit: limit },
+      { $project: { __taskStatusRank: 0, __taskPriorityRank: 0 } }
+    ]);
+  }
   return getLegacyModel(collection).find({ archivedAt: { $exists: false }, ...filter }).sort({ legacyId: -1 }).limit(limit).lean<LegacyRecord[]>();
 }
 
@@ -228,6 +248,56 @@ function buildQuery(options: ListOptions): FilterQuery<LegacyRecord> {
 
 function normalizeField(value: string | undefined): value is string {
   return Boolean(value && /^[a-zA-Z][a-zA-Z0-9_]*$/.test(value));
+}
+
+function taskWorkflowSortStages(secondarySort: 'due_date' | 'legacy_id'): PipelineStage[] {
+  const status = normalizedTaskFieldExpression('status');
+  const priority = normalizedTaskFieldExpression('priority');
+  const sort: Record<string, 1 | -1> = {
+    __taskStatusRank: 1,
+    __taskPriorityRank: 1
+  };
+  if (secondarySort === 'due_date') sort['raw.due_date'] = -1;
+  sort.updatedAt = -1;
+  sort.legacyId = -1;
+
+  return [
+    {
+      $set: {
+        __taskStatusRank: {
+          $switch: {
+            branches: [
+              { case: { $in: [status, ['pending']] }, then: 0 },
+              { case: { $in: [status, ['in_progress', 'active', 'working_on']] }, then: 1 },
+              { case: { $in: [status, ['review', 'in_review']] }, then: 2 },
+              { case: { $in: [status, ['completed', 'complete', 'done']] }, then: 3 },
+              { case: { $in: [status, ['blocked']] }, then: 4 }
+            ],
+            default: 0
+          }
+        },
+        __taskPriorityRank: {
+          $switch: {
+            branches: [
+              { case: { $in: [priority, ['urgent']] }, then: 0 },
+              { case: { $in: [priority, ['high']] }, then: 1 },
+              { case: { $in: [priority, ['normal']] }, then: 2 },
+              { case: { $in: [priority, ['low']] }, then: 3 }
+            ],
+            default: 2
+          }
+        }
+      }
+    },
+    { $sort: sort }
+  ];
+}
+
+function normalizedTaskFieldExpression(field: 'status' | 'priority'): Record<string, unknown> {
+  const value = { $convert: { input: `$raw.${field}`, to: 'string', onError: '', onNull: '' } };
+  const lower = { $toLower: value };
+  const spacesReplaced = { $replaceAll: { input: lower, find: ' ', replacement: '_' } };
+  return { $replaceAll: { input: spacesReplaced, find: '-', replacement: '_' } };
 }
 
 function numeric(value: unknown): number | null {

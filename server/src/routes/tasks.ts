@@ -13,6 +13,7 @@ import {
   listLegacyRecords,
   listRawRecords,
   restoreArchivedLegacyRecords,
+  TASK_WORKFLOW_SORT,
   updateLegacyRecord
 } from '../services/legacyRepository.js';
 import { toPublicRecordWithRelations, toPublicRecordsWithRelations } from '../services/relationLabels.js';
@@ -128,7 +129,9 @@ tasksRouter.get('/', asyncHandler(async (req, res) => {
       ...(statusFilter.success ? { status: statusFilter.data } : {}),
       ...(priorityFilter.success ? { priority: priorityFilter.data } : {})
     },
-    sort: typeof req.query.sort === 'string' ? req.query.sort : 'due_date',
+    // Keep every page in the same workflow order: status first, then priority.
+    // The repository applies this as a database sort before pagination.
+    sort: TASK_WORKFLOW_SORT,
     order: req.query.order === 'asc' ? 'asc' : 'desc',
     // Scope before pagination so the total count and every page follow the
     // same owner/assignee/mention/tag access policy.

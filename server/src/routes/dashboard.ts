@@ -259,10 +259,16 @@ async function requireOwnedWorkNote(userId: number, noteId: number): Promise<Leg
 
 function taskSort(task: LegacyRecord): number {
   const status = normalizedTaskStatus(task.raw.status);
-  if (status === 'blocked') return 0;
-  if (status === 'completed') return 3;
-  const due = String(task.raw.due_date ?? '').slice(0, 10);
-  return due && due < todayIst() ? 1 : 2;
+  const statusRank: Record<(typeof taskStatuses)[number], number> = {
+    pending: 0,
+    in_progress: 1,
+    review: 2,
+    completed: 3,
+    blocked: 4
+  };
+  const priority = String(task.raw.priority ?? 'normal').trim().toLowerCase();
+  const priorityRank = priority === 'urgent' ? 0 : priority === 'high' ? 1 : priority === 'low' ? 3 : 2;
+  return statusRank[status] * 4 + priorityRank;
 }
 
 function workNoteSort(note: LegacyRecord): number {
