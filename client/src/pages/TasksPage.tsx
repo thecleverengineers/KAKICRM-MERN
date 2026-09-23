@@ -148,7 +148,7 @@ export function TasksPage() {
   return <>
     <PageHeader eyebrow="WORK MANAGEMENT" title="Tasks" description={isEmployee ? 'Tasks you own, are assigned to, mentioned in, or tagged in are shown here. You can assign work to one or more employees.' : 'Keep projects moving with ownership, progress updates, task chat and time logs.'} actions={canCreate ? <><>{canManage && <button className="button button--secondary" onClick={() => setRecycleBinOpen(true)}><ArchiveRestore size={17} /> Task recycle</button>}</><button className="button" onClick={() => setCreateOpen(true)}><Plus size={17} /> New task</button></> : undefined} />
     <div className="task-status-tabs" role="tablist" aria-label="Tasks by status">
-      {taskStatusTabs.map((tab) => <button className={activeStatus === tab.id ? 'task-status-tab is-active' : 'task-status-tab'} key={tab.id} type="button" role="tab" aria-selected={activeStatus === tab.id} onClick={() => { setActiveStatus(tab.id); setPage(1); }}>{tab.label}</button>)}
+      {taskStatusTabs.map((tab) => <button className={activeStatus === tab.id ? 'task-status-tab is-active' : 'task-status-tab'} data-status={tab.id} key={tab.id} type="button" role="tab" aria-selected={activeStatus === tab.id} onClick={() => { setActiveStatus(tab.id); setPage(1); }}><span className="task-status-tab__dot" aria-hidden="true" /><span>{tab.label}</span></button>)}
     </div>
     <div className="toolbar task-toolbar task-toolbar--records">
       <div className="task-search-area" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setSearchOpen(false); }}>
