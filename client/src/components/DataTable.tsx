@@ -49,7 +49,7 @@ export function DataTable({ records, columns, resource, page = 1, pages = 1, tot
   return <div className="table-card">
     <div className="table-scroll">
       <table>
-        <thead><tr>{selectable && <th className="table-select-cell"><input className="table-select" type="checkbox" checked={allVisibleSelected} onChange={(event) => toggleVisible(event.target.checked)} aria-label="Select all visible records" /></th>}<th>ID</th>{columns.map((column) => <th key={column}>{labels.get(column) ?? readableFieldName(column)}</th>)}{(onOpen || onEdit || onArchive) && <th aria-label="Actions" />}</tr></thead>
+        <thead><tr>{selectable && <th className="table-select-cell"><input className="table-select" type="checkbox" checked={allVisibleSelected} onChange={(event) => toggleVisible(event.target.checked)} aria-label="Select all visible records" /></th>}<th>ID</th>{columns.map((column) => <th key={column} data-column={column}>{labels.get(column) ?? readableFieldName(column)}</th>)}{(onOpen || onEdit || onArchive) && <th aria-label="Actions" />}</tr></thead>
         <tbody>
           {records.map((record) => {
             const rowIsClickable = clickableRows && Boolean(onOpen);
@@ -70,7 +70,7 @@ export function DataTable({ records, columns, resource, page = 1, pages = 1, tot
                   ? billingProfileAssetValue(record.fields, billingAssetKey(column))
                   : record.fields[column];
                 const isTaskDueDate = resource?.id === 'tasks' && column === 'due_date';
-                return <td key={column} className={column === primaryLinkColumn && rowIsClickable ? 'table-cell--primary-link' : undefined}>{isTaskDueDate ? renderTaskDueDate(value) : renderValue(column, value, record.relationLabels?.[column], definition?.kind === 'image' ? definition.label : undefined)}</td>;
+                return <td key={column} data-column={column} className={column === primaryLinkColumn && rowIsClickable ? 'table-cell--primary-link' : undefined}>{isTaskDueDate ? renderTaskDueDate(value) : renderValue(column, value, record.relationLabels?.[column], definition?.kind === 'image' ? definition.label : undefined)}</td>;
               })}
               {(onOpen || onEdit || onArchive) && <td className="table-actions">
                 {onOpen && <button className="icon-button icon-button--small" onClick={(event) => { event.stopPropagation(); onOpen(record); }} aria-label="Open"><Eye size={16} /></button>}
