@@ -53,7 +53,7 @@ export async function listLegacyRecords(collection: LegacyCollection, options: L
         ...taskAllTabSortStages(),
         { $skip: (page - 1) * limit },
         { $limit: limit },
-        { $project: { __taskStatusRank: 0, __taskDueDateRank: 0, __taskDueDate: 0 } }
+        { $project: { __taskStatusRank: 0, __taskDueDateRank: 0, __taskDueDate: 0, __taskPriorityRank: 0 } }
       ])
       : workflowSort
         ? model.aggregate<LegacyRecord>([
@@ -263,6 +263,7 @@ function normalizeField(value: string | undefined): value is string {
 
 function taskAllTabSortStages(): PipelineStage[] {
   const status = normalizedTaskFieldExpression('status');
+  const priority = normalizedTaskFieldExpression('priority');
   const dueDate = {
     $convert: {
       input: '$raw.due_date',
@@ -286,7 +287,18 @@ function taskAllTabSortStages(): PipelineStage[] {
           }
         },
         __taskDueDate: dueDate,
-        __taskDueDateRank: { $cond: [{ $eq: [dueDate, null] }, 1, 0] }
+        __taskDueDateRank: { $cond: [{ $eq: [dueDate, null] }, 1, 0] },
+        __taskPriorityRank: {
+          $switch: {
+            branches: [
+              { case: { $in: [priority, ['urgent']] }, then: 0 },
+              { case: { $in: [priority, ['high']] }, then: 1 },
+              { case: { $in: [priority, ['normal']] }, then: 2 },
+              { case: { $in: [priority, ['low']] }, then: 3 }
+            ],
+            default: 2
+          }
+        }
       }
     },
     {
@@ -294,6 +306,7 @@ function taskAllTabSortStages(): PipelineStage[] {
         __taskStatusRank: 1,
         __taskDueDateRank: 1,
         __taskDueDate: 1,
+        __taskPriorityRank: 1,
         updatedAt: -1,
         legacyId: -1
       }
