@@ -88,12 +88,18 @@ export function DataTable({ records, columns, resource, page = 1, pages = 1, tot
 
 function renderTaskDueDate(value: unknown) {
   const raw = String(value ?? '').trim();
+  const baseStyle = { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, whiteSpace: 'nowrap' } as const;
+  const dateStyle = { color: 'var(--text, #3D4C64)', fontSize: '.75rem', fontWeight: 700 } as const;
+  const daysStyle = (color: string) => ({ color, fontSize: '.68rem', fontWeight: 800, lineHeight: 1.2 } as const);
+
   if (!raw) {
-    return <span className="task-due-date task-due-date--empty"><span className="task-due-date__date">—</span><span className="task-due-date__days task-due-date__days--none">No Due Date</span></span>;
+    return <span className="task-due-date" style={baseStyle}><span className="task-due-date__date" style={{ ...dateStyle, color: '#94A3B8' }}>—</span><span className="task-due-date__days" style={daysStyle('#64748B')}>No Due Date</span></span>;
   }
 
   const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!match) return <span className="task-due-date"><span className="task-due-date__date">{date(value)}</span></span>;
+  if (!match) {
+    return <span className="task-due-date" style={baseStyle}><span className="task-due-date__date" style={dateStyle}>{date(value)}</span></span>;
+  }
 
   const dueDay = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
   const now = new Date();
@@ -106,21 +112,21 @@ function renderTaskDueDate(value: unknown) {
       ? 'Due Today'
       : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
 
-  const stateClass = daysLeft < 0
-    ? 'task-due-date__days--overdue'
+  const color = daysLeft < 0
+    ? '#DC2626'
     : daysLeft === 0
-      ? 'task-due-date__days--today'
+      ? '#EA580C'
       : daysLeft <= 2
-        ? 'task-due-date__days--1-2'
+        ? '#F97316'
         : daysLeft <= 5
-          ? 'task-due-date__days--3-5'
+          ? '#F59E0B'
           : daysLeft <= 7
-            ? 'task-due-date__days--6-7'
+            ? '#EAB308'
             : daysLeft <= 14
-              ? 'task-due-date__days--8-14'
-              : 'task-due-date__days--15-plus';
+              ? '#22C55E'
+              : '#16A34A';
 
-  return <span className="task-due-date"><span className="task-due-date__date">{date(value)}</span><span className={`task-due-date__days ${stateClass}`}>{label}</span></span>;
+  return <span className="task-due-date" style={baseStyle}><span className="task-due-date__date" style={dateStyle}>{date(value)}</span><span className="task-due-date__days" style={daysStyle(color)}>{label}</span></span>;
 }
 
 function renderValue(column: string, value: unknown, relationLabel?: string, imageLabel?: string) {
