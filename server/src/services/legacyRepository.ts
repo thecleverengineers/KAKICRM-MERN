@@ -28,6 +28,8 @@ export interface ListOptions {
 
 /** Sort key used by task lists to keep the workflow order stable across pages. */
 export const TASK_WORKFLOW_SORT = '__task_workflow__';
+/** Sort key used by the Tasks page All tab: active workflow status, then nearest due date. */
+export const TASK_ALL_TAB_SORT = '__task_all_tab__';
 
 export interface PagedRecords {
   data: PublicLegacyRecord[];
@@ -40,19 +42,28 @@ export async function listLegacyRecords(collection: LegacyCollection, options: L
   const limit = Math.min(100, Math.max(1, options.limit ?? 25));
   const query = buildQuery(options);
   const workflowSort = collection === 'tasks' && options.sort === TASK_WORKFLOW_SORT;
+  const allTabSort = collection === 'tasks' && options.sort === TASK_ALL_TAB_SORT;
   const sortField = normalizeField(options.sort) ? `raw.${options.sort}` : 'updatedAt';
   const direction = options.order === 'asc' ? 1 : -1;
 
   const [rows, total] = await Promise.all([
-    workflowSort
+    allTabSort
       ? model.aggregate<LegacyRecord>([
         { $match: query },
-        ...taskWorkflowSortStages('due_date'),
+        ...taskAllTabSortStages(),
         { $skip: (page - 1) * limit },
         { $limit: limit },
-        { $project: { __taskStatusRank: 0, __taskPriorityRank: 0 } }
+        { $project: { __taskStatusRank: 0, __taskDueDateRank: 0, __taskDueDate: 0 } }
       ])
-      : model.find(query).sort({ [sortField]: direction, legacyId: -1 }).skip((page - 1) * limit).limit(limit).lean<LegacyRecord[]>(),
+      : workflowSort
+        ? model.aggregate<LegacyRecord>([
+          { $match: query },
+          ...taskWorkflowSortStages('due_date'),
+          { $skip: (page - 1) * limit },
+          { $limit: limit },
+          { $project: { __taskStatusRank: 0, __taskPriorityRank: 0 } }
+        ])
+        : model.find(query).sort({ [sortField]: direction, legacyId: -1 }).skip((page - 1) * limit).limit(limit).lean<LegacyRecord[]>(),
     model.countDocuments(query)
   ]);
 
@@ -248,6 +259,46 @@ function buildQuery(options: ListOptions): FilterQuery<LegacyRecord> {
 
 function normalizeField(value: string | undefined): value is string {
   return Boolean(value && /^[a-zA-Z][a-zA-Z0-9_]*$/.test(value));
+}
+
+function taskAllTabSortStages(): PipelineStage[] {
+  const status = normalizedTaskFieldExpression('status');
+  const dueDate = {
+    $convert: {
+      input: '$raw.due_date',
+      to: 'date',
+      onError: null,
+      onNull: null
+    }
+  };
+
+  return [
+    {
+      $set: {
+        __taskStatusRank: {
+          $switch: {
+            branches: [
+              { case: { $in: [status, ['in_progress', 'active', 'working_on']] }, then: 0 },
+              { case: { $in: [status, ['review', 'in_review']] }, then: 1 },
+              { case: { $in: [status, ['pending']] }, then: 2 }
+            ],
+            default: 3
+          }
+        },
+        __taskDueDate: dueDate,
+        __taskDueDateRank: { $cond: [{ $eq: [dueDate, null] }, 1, 0] }
+      }
+    },
+    {
+      $sort: {
+        __taskStatusRank: 1,
+        __taskDueDateRank: 1,
+        __taskDueDate: 1,
+        updatedAt: -1,
+        legacyId: -1
+      }
+    }
+  ];
 }
 
 function taskWorkflowSortStages(secondarySort: 'due_date' | 'legacy_id'): PipelineStage[] {
