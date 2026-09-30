@@ -13,6 +13,7 @@ import {
   listLegacyRecords,
   listRawRecords,
   restoreArchivedLegacyRecords,
+  TASK_ALL_TAB_SORT,
   TASK_WORKFLOW_SORT,
   updateLegacyRecord
 } from '../services/legacyRepository.js';
@@ -113,6 +114,19 @@ tasksRouter.get('/', asyncHandler(async (req, res) => {
   const taskScope = employeeOnly ? await taskVisibilityScopeWithRelationships(req.auth!.legacyId) : undefined;
   const statusFilter = taskListStatusSchema.safeParse(req.query.status);
   const priorityFilter = taskListPrioritySchema.safeParse(req.query.priority);
+  const activeAllScope = {
+    $or: [
+      { 'raw.status': { $in: ['in_progress', 'active', 'working_on', 'review', 'in_review', 'pending'] } },
+      { 'raw.status': { $exists: false } },
+      { 'raw.status': null },
+      { 'raw.status': '' }
+    ]
+  };
+  const listScope = statusFilter.success
+    ? taskScope
+    : taskScope
+      ? { $and: [taskScope, activeAllScope] }
+      : activeAllScope;
   const searchTerm = typeof req.query.search === 'string' ? req.query.search.trim() : '';
   const matchingAssigneeIds = searchTerm ? await assigneeIdsByName(searchTerm) : [];
   const assigneeValues = matchingAssigneeIds.flatMap((id) => [id, String(id)]);
@@ -129,13 +143,14 @@ tasksRouter.get('/', asyncHandler(async (req, res) => {
       ...(statusFilter.success ? { status: statusFilter.data } : {}),
       ...(priorityFilter.success ? { priority: priorityFilter.data } : {})
     },
-    // Keep every page in the same workflow order: status first, then priority.
-    // The repository applies this as a database sort before pagination.
-    sort: TASK_WORKFLOW_SORT,
+    // The All tab shows active work only: In Progress → Review → Pending,
+    // then the nearest due date first within each status. Status-specific tabs
+    // keep the existing workflow sort.
+    sort: statusFilter.success ? TASK_WORKFLOW_SORT : TASK_ALL_TAB_SORT,
     order: req.query.order === 'asc' ? 'asc' : 'desc',
-    // Scope before pagination so the total count and every page follow the
-    // same owner/assignee/mention/tag access policy.
-    scope: taskScope
+    // Scope before pagination so totals and pages match what the All tab can
+    // actually display. Completed and Blocked stay available in their own tabs.
+    scope: listScope
   });
   const visible = await Promise.all(result.data.map(async (task) => ({ task, visible: await canSeeTask(req.auth!, task.fields) })));
   res.json({ ...result, data: visible.filter((item) => item.visible).map((item) => item.task) });
