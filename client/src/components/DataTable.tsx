@@ -69,7 +69,8 @@ export function DataTable({ records, columns, resource, page = 1, pages = 1, tot
                 const value = resource?.id === 'billing_profiles' && definition?.kind === 'image'
                   ? billingProfileAssetValue(record.fields, billingAssetKey(column))
                   : record.fields[column];
-                return <td key={column} className={column === primaryLinkColumn && rowIsClickable ? 'table-cell--primary-link' : undefined}>{renderValue(column, value, record.relationLabels?.[column], definition?.kind === 'image' ? definition.label : undefined)}</td>;
+                const isTaskDueDate = resource?.id === 'tasks' && column === 'due_date';
+                return <td key={column} className={column === primaryLinkColumn && rowIsClickable ? 'table-cell--primary-link' : undefined}>{isTaskDueDate ? renderTaskDueDate(value) : renderValue(column, value, record.relationLabels?.[column], definition?.kind === 'image' ? definition.label : undefined)}</td>;
               })}
               {(onOpen || onEdit || onArchive) && <td className="table-actions">
                 {onOpen && <button className="icon-button icon-button--small" onClick={(event) => { event.stopPropagation(); onOpen(record); }} aria-label="Open"><Eye size={16} /></button>}
@@ -83,6 +84,39 @@ export function DataTable({ records, columns, resource, page = 1, pages = 1, tot
     </div>
     {onPageChange && <div className="pagination"><span>{total} record{total === 1 ? '' : 's'}</span><div><button className="icon-button icon-button--small" disabled={page <= 1} onClick={() => onPageChange(page - 1)} aria-label="Previous page"><ChevronLeft size={17} /></button><span>Page {page} of {pages}</span><button className="icon-button icon-button--small" disabled={page >= pages} onClick={() => onPageChange(page + 1)} aria-label="Next page"><ChevronRight size={17} /></button></div></div>}
   </div>;
+}
+
+function renderTaskDueDate(value: unknown) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return <span className="task-due-date task-due-date--empty">No due date</span>;
+
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return date(value);
+
+  const dueDay = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const now = new Date();
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const daysLeft = Math.round((dueDay - today) / 86_400_000);
+
+  const label = daysLeft > 1
+    ? `${daysLeft} days left`
+    : daysLeft === 1
+      ? '1 day left'
+      : daysLeft === 0
+        ? 'Due today'
+        : daysLeft === -1
+          ? '1 day overdue'
+          : `${Math.abs(daysLeft)} days overdue`;
+
+  const stateClass = daysLeft < 0
+    ? 'task-due-date--overdue'
+    : daysLeft === 0
+      ? 'task-due-date--today'
+      : daysLeft <= 3
+        ? 'task-due-date--soon'
+        : 'task-due-date--upcoming';
+
+  return <span className="task-due-date"><span className="task-due-date__date">{date(value)}</span><span className={`task-due-date__days ${stateClass}`}>{label}</span></span>;
 }
 
 function renderValue(column: string, value: unknown, relationLabel?: string, imageLabel?: string) {
