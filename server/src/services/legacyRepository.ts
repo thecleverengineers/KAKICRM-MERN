@@ -304,9 +304,9 @@ function taskAllTabSortStages(): PipelineStage[] {
     {
       $sort: {
         __taskStatusRank: 1,
+        __taskPriorityRank: 1,
         __taskDueDateRank: 1,
         __taskDueDate: 1,
-        __taskPriorityRank: 1,
         updatedAt: -1,
         legacyId: -1
       }
