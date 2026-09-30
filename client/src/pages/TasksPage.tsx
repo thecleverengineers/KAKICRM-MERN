@@ -67,24 +67,15 @@ button.task-status-tab.is-active { border-color: #315c9e; background: linear-gra
 .task-records-responsive .table-scroll table { width: 100%; min-width: 1040px; table-layout: fixed; }
 .task-records-responsive th,
 .task-records-responsive td { min-width: 0; overflow: hidden; }
-.task-records-responsive th:nth-child(1),
-.task-records-responsive td:nth-child(1) { width: 42px; }
-.task-records-responsive th:nth-child(2),
-.task-records-responsive td:nth-child(2) { width: 60px; }
-.task-records-responsive th:nth-child(3),
-.task-records-responsive td:nth-child(3) { width: 26%; }
-.task-records-responsive th:nth-child(4),
-.task-records-responsive td:nth-child(4) { width: 105px; }
-.task-records-responsive th:nth-child(5),
-.task-records-responsive td:nth-child(5) { width: 86px; }
-.task-records-responsive th:nth-child(6),
-.task-records-responsive td:nth-child(6) { width: 19%; }
-.task-records-responsive th:nth-child(7),
-.task-records-responsive td:nth-child(7) { width: 118px; }
-.task-records-responsive th:nth-child(8),
-.task-records-responsive td:nth-child(8) { width: 18%; }
-.task-records-responsive th:last-child,
-.task-records-responsive td:last-child { width: 48px; }
+.task-records-responsive .table-select-cell { width: 42px; }
+.task-records-responsive .table-id { width: 60px; }
+.task-records-responsive [data-column="title"] { width: 26%; }
+.task-records-responsive [data-column="status"] { width: 105px; }
+.task-records-responsive [data-column="priority"] { width: 86px; }
+.task-records-responsive [data-column="assignee_ids"] { width: 19%; }
+.task-records-responsive [data-column="due_date"] { width: 118px; }
+.task-records-responsive [data-column="project_id"] { width: 18%; }
+.task-records-responsive .table-actions { width: 48px; }
 .task-records-responsive td .truncate-cell { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-records-responsive .pagination { border-top: 1px solid #edf0f4; background: #fff; }
 @media (max-width: 760px) {
