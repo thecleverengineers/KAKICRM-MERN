@@ -30,6 +30,8 @@ export interface ListOptions {
 export const TASK_WORKFLOW_SORT = '__task_workflow__';
 /** Sort key used by the Tasks page All tab: active workflow status, then nearest due date. */
 export const TASK_ALL_TAB_SORT = '__task_all_tab__';
+/** Sort key used by individual task status tabs: priority first, then nearest due date. */
+export const TASK_STATUS_TAB_SORT = '__task_status_tab__';
 
 export interface PagedRecords {
   data: PublicLegacyRecord[];
@@ -43,6 +45,7 @@ export async function listLegacyRecords(collection: LegacyCollection, options: L
   const query = buildQuery(options);
   const workflowSort = collection === 'tasks' && options.sort === TASK_WORKFLOW_SORT;
   const allTabSort = collection === 'tasks' && options.sort === TASK_ALL_TAB_SORT;
+  const statusTabSort = collection === 'tasks' && options.sort === TASK_STATUS_TAB_SORT;
   const sortField = normalizeField(options.sort) ? `raw.${options.sort}` : 'updatedAt';
   const direction = options.order === 'asc' ? 1 : -1;
 
@@ -55,15 +58,23 @@ export async function listLegacyRecords(collection: LegacyCollection, options: L
         { $limit: limit },
         { $project: { __taskStatusRank: 0, __taskDueDateRank: 0, __taskDueDate: 0, __taskPriorityRank: 0 } }
       ])
-      : workflowSort
+      : statusTabSort
         ? model.aggregate<LegacyRecord>([
           { $match: query },
-          ...taskWorkflowSortStages('due_date'),
+          ...taskStatusTabSortStages(),
           { $skip: (page - 1) * limit },
           { $limit: limit },
-          { $project: { __taskStatusRank: 0, __taskPriorityRank: 0 } }
+          { $project: { __taskStatusRank: 0, __taskDueDateRank: 0, __taskDueDate: 0, __taskPriorityRank: 0 } }
         ])
-        : model.find(query).sort({ [sortField]: direction, legacyId: -1 }).skip((page - 1) * limit).limit(limit).lean<LegacyRecord[]>(),
+        : workflowSort
+          ? model.aggregate<LegacyRecord>([
+            { $match: query },
+            ...taskWorkflowSortStages('due_date'),
+            { $skip: (page - 1) * limit },
+            { $limit: limit },
+            { $project: { __taskStatusRank: 0, __taskPriorityRank: 0 } }
+          ])
+          : model.find(query).sort({ [sortField]: direction, legacyId: -1 }).skip((page - 1) * limit).limit(limit).lean<LegacyRecord[]>(),
     model.countDocuments(query)
   ]);
 
@@ -259,6 +270,61 @@ function buildQuery(options: ListOptions): FilterQuery<LegacyRecord> {
 
 function normalizeField(value: string | undefined): value is string {
   return Boolean(value && /^[a-zA-Z][a-zA-Z0-9_]*$/.test(value));
+}
+
+function taskStatusTabSortStages(): PipelineStage[] {
+  const status = normalizedTaskFieldExpression('status');
+  const priority = normalizedTaskFieldExpression('priority');
+  const dueDate = {
+    $convert: {
+      input: '$raw.due_date',
+      to: 'date',
+      onError: null,
+      onNull: null
+    }
+  };
+
+  return [
+    {
+      $set: {
+        __taskStatusRank: {
+          $switch: {
+            branches: [
+              { case: { $in: [status, ['in_progress', 'active', 'working_on']] }, then: 0 },
+              { case: { $in: [status, ['review', 'in_review']] }, then: 1 },
+              { case: { $in: [status, ['pending']] }, then: 2 },
+              { case: { $in: [status, ['completed', 'complete', 'done']] }, then: 3 },
+              { case: { $in: [status, ['blocked']] }, then: 4 }
+            ],
+            default: 5
+          }
+        },
+        __taskPriorityRank: {
+          $switch: {
+            branches: [
+              { case: { $in: [priority, ['urgent']] }, then: 0 },
+              { case: { $in: [priority, ['high']] }, then: 1 },
+              { case: { $in: [priority, ['normal']] }, then: 2 },
+              { case: { $in: [priority, ['low']] }, then: 3 }
+            ],
+            default: 2
+          }
+        },
+        __taskDueDate: dueDate,
+        __taskDueDateRank: { $cond: [{ $eq: [dueDate, null] }, 1, 0] }
+      }
+    },
+    {
+      $sort: {
+        __taskStatusRank: 1,
+        __taskPriorityRank: 1,
+        __taskDueDateRank: 1,
+        __taskDueDate: 1,
+        updatedAt: -1,
+        legacyId: -1
+      }
+    }
+  ];
 }
 
 function taskAllTabSortStages(): PipelineStage[] {
