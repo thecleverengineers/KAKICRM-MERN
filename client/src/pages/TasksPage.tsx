@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArchiveRestore, Plus, Search, Trash2, X } from 'lucide-react';
+import { ArchiveRestore, ChevronDown, Plus, Search, Trash2, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DataTable } from '../components/DataTable.js';
 import { ErrorState, LoadingState } from '../components/LoadingState.js';
@@ -48,6 +48,19 @@ button.task-status-tab.is-active { border-color: #315c9e; background: linear-gra
 .task-status-tab[data-status="completed"] .task-status-tab__dot { background: #39a66b; box-shadow: 0 0 0 3px rgba(57, 166, 107, .14); }
 .task-status-tab[data-status="blocked"] .task-status-tab__dot { background: #d15d68; box-shadow: 0 0 0 3px rgba(209, 93, 104, .14); }
 .task-status-tab.is-active .task-status-tab__dot { background: currentColor; box-shadow: 0 0 0 3px rgba(255, 255, 255, .2); }
+.task-priority-filter { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.task-priority-filter__label { color: #6f7d91; font-size: .69rem; font-weight: 800; letter-spacing: .055em; text-transform: uppercase; white-space: nowrap; }
+.task-priority-select { position: relative; min-width: 168px; height: 42px; display: flex; align-items: center; gap: 9px; padding: 0 38px 0 12px; overflow: hidden; border: 1px solid #d8e1ec; border-radius: 12px; background: linear-gradient(180deg,#ffffff 0%,#f8fafd 100%); box-shadow: 0 5px 14px rgba(33,52,82,.06), inset 0 1px 0 rgba(255,255,255,.9); transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+.task-priority-select:hover { border-color: #b8c7da; box-shadow: 0 8px 20px rgba(33,52,82,.09), inset 0 1px 0 rgba(255,255,255,.95); transform: translateY(-1px); }
+.task-priority-select:focus-within { border-color: #7f9ed1; box-shadow: 0 0 0 3px rgba(75,118,183,.12), 0 8px 20px rgba(33,52,82,.08); }
+.task-priority-select__dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: #94a3b8; box-shadow: 0 0 0 4px rgba(148,163,184,.12); }
+.task-priority-select[data-priority="urgent"] .task-priority-select__dot { background: #dc2626; box-shadow: 0 0 0 4px rgba(220,38,38,.10); }
+.task-priority-select[data-priority="high"] .task-priority-select__dot { background: #f97316; box-shadow: 0 0 0 4px rgba(249,115,22,.11); }
+.task-priority-select[data-priority="normal"] .task-priority-select__dot { background: #3b82f6; box-shadow: 0 0 0 4px rgba(59,130,246,.11); }
+.task-priority-select[data-priority="low"] .task-priority-select__dot { background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,.11); }
+.task-priority-select select { width: 100%; height: 100%; min-width: 0; padding: 0; border: 0; outline: 0; appearance: none; background: transparent; color: #26364f; font: inherit; font-size: .77rem; font-weight: 750; cursor: pointer; }
+.task-priority-select__chevron { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #7f8ea3; pointer-events: none; }
+
 @media (max-width: 760px) {
   .task-status-tabs { display: flex; grid-template-columns: none; gap: 6px; padding: 6px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
   .task-status-tabs::-webkit-scrollbar { height: 6px; }
@@ -85,6 +98,7 @@ button.task-status-tab.is-active { border-color: #315c9e; background: linear-gra
   .task-toolbar--records .task-search-area { flex: 1 1 100%; max-width: none; }
   .task-search-form { min-width: 0; }
   .task-priority-filter { flex: 1 1 auto; min-width: 0; }
+  .task-priority-select { min-width: 150px; max-width: 100%; }
   .task-priority-filter select { max-width: 100%; }
   .task-toolbar-actions { width: 100%; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
   .task-toolbar-actions > * { flex: 0 0 auto; }
@@ -231,7 +245,7 @@ export function TasksPage() {
           <button className="task-search-all" type="button" onClick={() => applySearch()}>Show all results for “{searchInput.trim()}”</button>
         </div>}
       </div>
-      <label className="task-priority-filter"><span>Priority</span><select value={priorityFilter} onChange={(event) => { setPriorityFilter(event.target.value as 'all' | TaskPriority); setPage(1); }} aria-label="Filter tasks by priority"><option value="all">All priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label>
+      <label className="task-priority-filter"><span className="task-priority-filter__label">Priority</span><span className="task-priority-select" data-priority={priorityFilter}><span className="task-priority-select__dot" aria-hidden="true" /><select value={priorityFilter} onChange={(event) => { setPriorityFilter(event.target.value as 'all' | TaskPriority); setPage(1); }} aria-label="Filter tasks by priority"><option value="all">All priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select><ChevronDown className="task-priority-select__chevron" size={16} aria-hidden="true" /></span></label>
       <div className="task-toolbar-actions">{canManage && selectedTaskIds.length > 0 && <><span className="task-selection-count">{selectedTaskIds.length} selected</span><button className="button button--danger button--compact" type="button" onClick={() => { setRecycleError(null); setRecycleConfirmOpen(true); }}><Trash2 size={16} /> Move to recycle</button><button className="text-button" type="button" onClick={() => setSelectedTaskIds([])}>Clear</button></>}{query.data.pagination.total} {isEmployee ? 'in your work circle' : 'visible to you'}</div>
     </div>
     {notice && <p className="task-action-notice" role="status">{notice}</p>}
