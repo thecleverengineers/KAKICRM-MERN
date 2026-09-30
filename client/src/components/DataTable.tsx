@@ -88,33 +88,37 @@ export function DataTable({ records, columns, resource, page = 1, pages = 1, tot
 
 function renderTaskDueDate(value: unknown) {
   const raw = String(value ?? '').trim();
-  if (!raw) return <span className="task-due-date task-due-date--empty">No due date</span>;
+  if (!raw) {
+    return <span className="task-due-date task-due-date--empty"><span className="task-due-date__date">—</span><span className="task-due-date__days task-due-date__days--none">No Due Date</span></span>;
+  }
 
   const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!match) return date(value);
+  if (!match) return <span className="task-due-date"><span className="task-due-date__date">{date(value)}</span></span>;
 
   const dueDay = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
   const now = new Date();
   const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
   const daysLeft = Math.round((dueDay - today) / 86_400_000);
 
-  const label = daysLeft > 1
-    ? `${daysLeft} days left`
-    : daysLeft === 1
-      ? '1 day left'
-      : daysLeft === 0
-        ? 'Due today'
-        : daysLeft === -1
-          ? '1 day overdue'
-          : `${Math.abs(daysLeft)} days overdue`;
+  const label = daysLeft < 0
+    ? `${Math.abs(daysLeft)} day${Math.abs(daysLeft) === 1 ? '' : 's'} overdue`
+    : daysLeft === 0
+      ? 'Due Today'
+      : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
 
   const stateClass = daysLeft < 0
-    ? 'task-due-date--overdue'
+    ? 'task-due-date__days--overdue'
     : daysLeft === 0
-      ? 'task-due-date--today'
-      : daysLeft <= 3
-        ? 'task-due-date--soon'
-        : 'task-due-date--upcoming';
+      ? 'task-due-date__days--today'
+      : daysLeft <= 2
+        ? 'task-due-date__days--1-2'
+        : daysLeft <= 5
+          ? 'task-due-date__days--3-5'
+          : daysLeft <= 7
+            ? 'task-due-date__days--6-7'
+            : daysLeft <= 14
+              ? 'task-due-date__days--8-14'
+              : 'task-due-date__days--15-plus';
 
   return <span className="task-due-date"><span className="task-due-date__date">{date(value)}</span><span className={`task-due-date__days ${stateClass}`}>{label}</span></span>;
 }
