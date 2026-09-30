@@ -95,8 +95,13 @@ app.use('/api/webhooks', webhooksRouter);
 
 const clientBuild = path.resolve(process.cwd(), 'dist/client');
 if (env.NODE_ENV === 'production' && existsSync(clientBuild)) {
-  app.use(express.static(clientBuild, { index: false, maxAge: '1h' }));
-  app.get('*', (_req, res) => res.sendFile(path.join(clientBuild, 'index.html')));
+  app.use(express.static(clientBuild, { index: false, maxAge: '1h', immutable: true }));
+  app.get('*', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.sendFile(path.join(clientBuild, 'index.html'));
+  });
 }
 
 app.use(notFound);
