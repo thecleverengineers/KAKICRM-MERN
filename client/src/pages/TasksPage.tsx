@@ -48,8 +48,26 @@ button.task-status-tab.is-active { border-color: #315c9e; background: linear-gra
 .task-status-tab[data-status="completed"] .task-status-tab__dot { background: #39a66b; box-shadow: 0 0 0 3px rgba(57, 166, 107, .14); }
 .task-status-tab[data-status="blocked"] .task-status-tab__dot { background: #d15d68; box-shadow: 0 0 0 3px rgba(209, 93, 104, .14); }
 .task-status-tab.is-active .task-status-tab__dot { background: currentColor; box-shadow: 0 0 0 3px rgba(255, 255, 255, .2); }
-@media (max-width: 760px) { .task-status-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; padding: 5px; } button.task-status-tab { min-height: 42px; padding: 0 8px; font-size: .72rem; } .task-status-tab__dot { width: 7px; height: 7px; } }
-@media (max-width: 430px) { .task-status-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); } button.task-status-tab { justify-content: flex-start; padding-left: 14px; } }
+@media (max-width: 760px) {
+  .task-status-tabs { display: flex; grid-template-columns: none; gap: 6px; padding: 6px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+  .task-status-tabs::-webkit-scrollbar { height: 6px; }
+  .task-status-tabs::-webkit-scrollbar-thumb { border-radius: 999px; background: #c7d3e2; }
+  button.task-status-tab { flex: 0 0 auto; min-width: 112px; min-height: 42px; padding: 0 12px; font-size: .72rem; scroll-snap-align: start; }
+  .task-status-tab__dot { width: 7px; height: 7px; }
+}
+@media (max-width: 430px) {
+  button.task-status-tab { min-width: 106px; justify-content: center; padding: 0 10px; }
+}
+.task-records-responsive { width: 100%; min-width: 0; }
+.task-records-responsive .table-scroll { width: 100%; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-gutter: stable; }
+.task-records-responsive .table-scroll::-webkit-scrollbar { height: 8px; }
+.task-records-responsive .table-scroll::-webkit-scrollbar-track { background: #f3f6fa; }
+.task-records-responsive .table-scroll::-webkit-scrollbar-thumb { border-radius: 999px; background: #c4cfdd; }
+.task-records-responsive .table-scroll table { min-width: 900px; }
+@media (max-width: 760px) {
+  .task-records-responsive .table-scroll table { min-width: 820px; }
+  .task-records-responsive .pagination { gap: 12px; overflow-x: auto; white-space: nowrap; }
+}
 `;
 
 export function TasksPage() {
@@ -194,7 +212,9 @@ export function TasksPage() {
       <div className="task-toolbar-actions">{canManage && selectedTaskIds.length > 0 && <><span className="task-selection-count">{selectedTaskIds.length} selected</span><button className="button button--danger button--compact" type="button" onClick={() => { setRecycleError(null); setRecycleConfirmOpen(true); }}><Trash2 size={16} /> Move to recycle</button><button className="text-button" type="button" onClick={() => setSelectedTaskIds([])}>Clear</button></>}{query.data.pagination.total} {isEmployee ? 'in your work circle' : 'visible to you'}</div>
     </div>
     {notice && <p className="task-action-notice" role="status">{notice}</p>}
-    <DataTable records={query.data.data} columns={taskResource.columns} resource={taskResource} page={query.data.pagination.page} pages={query.data.pagination.pages} total={query.data.pagination.total} onPageChange={setPage} onOpen={(record) => navigate('/tasks/' + record.legacyId)} clickableRows selectable={canManage} selectedLegacyIds={selectedTaskIds} onSelectedLegacyIdsChange={setSelectedTaskIds} emptyTitle={activeStatus === 'all' ? 'No tasks found' : 'No tasks in this status'} />
+    <div className="task-records-responsive">
+      <DataTable records={query.data.data} columns={taskResource.columns} resource={taskResource} page={query.data.pagination.page} pages={query.data.pagination.pages} total={query.data.pagination.total} onPageChange={setPage} onOpen={(record) => navigate('/tasks/' + record.legacyId)} clickableRows selectable={canManage} selectedLegacyIds={selectedTaskIds} onSelectedLegacyIdsChange={setSelectedTaskIds} emptyTitle={activeStatus === 'all' ? 'No tasks found' : 'No tasks in this status'} />
+    </div>
     <RecordFormDialog open={createOpen} resource={taskResource} initialFields={initialTaskFields} onClose={() => setCreateOpen(false)} onSubmit={create} />
     <TaskRecycleBinDialog open={recycleBinOpen} onClose={() => setRecycleBinOpen(false)} onRestored={async (restoredCount) => { setNotice(`${restoredCount} task${restoredCount === 1 ? '' : 's'} restored from Task Recycle.`); await invalidateTaskViews(); }} />
     {recycleConfirmOpen && <TaskRecycleConfirmDialog count={selectedTaskIds.length} recycling={recycling} error={recycleError} onClose={() => { if (!recycling) setRecycleConfirmOpen(false); }} onConfirm={() => void recycleSelected()} />}
