@@ -58,14 +58,37 @@ button.task-status-tab.is-active { border-color: #315c9e; background: linear-gra
 @media (max-width: 430px) {
   button.task-status-tab { min-width: 106px; justify-content: center; padding: 0 10px; }
 }
-.task-records-responsive { width: 100%; min-width: 0; }
-.task-records-responsive .table-scroll { width: 100%; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-gutter: stable; }
+.task-records-responsive { width: 100%; min-width: 0; max-width: 100%; overflow: hidden; }
+.task-records-responsive .table-card { width: 100%; max-width: 100%; overflow: hidden; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.task-records-responsive .table-scroll { width: 100%; max-width: 100%; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-gutter: stable; background: #fff; }
 .task-records-responsive .table-scroll::-webkit-scrollbar { height: 8px; }
 .task-records-responsive .table-scroll::-webkit-scrollbar-track { background: #f3f6fa; }
 .task-records-responsive .table-scroll::-webkit-scrollbar-thumb { border-radius: 999px; background: #c4cfdd; }
-.task-records-responsive .table-scroll table { min-width: 900px; }
+.task-records-responsive .table-scroll table { width: 100%; min-width: 1040px; table-layout: fixed; }
+.task-records-responsive th,
+.task-records-responsive td { min-width: 0; overflow: hidden; }
+.task-records-responsive th:nth-child(1),
+.task-records-responsive td:nth-child(1) { width: 42px; }
+.task-records-responsive th:nth-child(2),
+.task-records-responsive td:nth-child(2) { width: 60px; }
+.task-records-responsive th:nth-child(3),
+.task-records-responsive td:nth-child(3) { width: 26%; }
+.task-records-responsive th:nth-child(4),
+.task-records-responsive td:nth-child(4) { width: 105px; }
+.task-records-responsive th:nth-child(5),
+.task-records-responsive td:nth-child(5) { width: 86px; }
+.task-records-responsive th:nth-child(6),
+.task-records-responsive td:nth-child(6) { width: 19%; }
+.task-records-responsive th:nth-child(7),
+.task-records-responsive td:nth-child(7) { width: 118px; }
+.task-records-responsive th:nth-child(8),
+.task-records-responsive td:nth-child(8) { width: 18%; }
+.task-records-responsive th:last-child,
+.task-records-responsive td:last-child { width: 48px; }
+.task-records-responsive td .truncate-cell { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-records-responsive .pagination { border-top: 1px solid #edf0f4; background: #fff; }
 @media (max-width: 760px) {
-  .task-records-responsive .table-scroll table { min-width: 820px; }
+  .task-records-responsive .table-scroll table { min-width: 980px; }
   .task-records-responsive .pagination { gap: 12px; overflow-x: auto; white-space: nowrap; }
   .task-toolbar--records { align-items: stretch; }
   .task-toolbar--records .task-search-area { flex: 1 1 100%; max-width: none; }
