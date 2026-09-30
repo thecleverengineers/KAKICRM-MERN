@@ -14,6 +14,7 @@ import {
   listRawRecords,
   restoreArchivedLegacyRecords,
   TASK_ALL_TAB_SORT,
+  TASK_STATUS_TAB_SORT,
   TASK_WORKFLOW_SORT,
   updateLegacyRecord
 } from '../services/legacyRepository.js';
@@ -146,7 +147,7 @@ tasksRouter.get('/', asyncHandler(async (req, res) => {
     // The All tab shows active work only: In Progress → Review → Pending,
     // then the nearest due date first within each status. Status-specific tabs
     // keep the existing workflow sort.
-    sort: statusFilter.success ? TASK_WORKFLOW_SORT : TASK_ALL_TAB_SORT,
+    sort: statusFilter.success ? TASK_STATUS_TAB_SORT : TASK_ALL_TAB_SORT,
     order: req.query.order === 'asc' ? 'asc' : 'desc',
     // Scope before pagination so totals and pages match what the All tab can
     // actually display. Completed and Blocked stay available in their own tabs.
