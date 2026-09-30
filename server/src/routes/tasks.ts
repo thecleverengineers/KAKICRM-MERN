@@ -15,7 +15,6 @@ import {
   restoreArchivedLegacyRecords,
   TASK_ALL_TAB_SORT,
   TASK_STATUS_TAB_SORT,
-  TASK_WORKFLOW_SORT,
   updateLegacyRecord
 } from '../services/legacyRepository.js';
 import { toPublicRecordWithRelations, toPublicRecordsWithRelations } from '../services/relationLabels.js';
