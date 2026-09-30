@@ -25,9 +25,9 @@ type TaskStatusFilter = 'all' | TaskStatus;
 
 const taskStatusTabs: Array<{ id: TaskStatusFilter; label: string }> = [
   { id: 'all', label: 'All' },
-  { id: 'pending', label: 'Pending' },
   { id: 'in_progress', label: 'In progress' },
   { id: 'review', label: 'Review' },
+  { id: 'pending', label: 'Pending' },
   { id: 'completed', label: 'Completed' },
   { id: 'blocked', label: 'Blocked' }
 ];
