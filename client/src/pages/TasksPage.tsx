@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArchiveRestore, ChevronDown, Plus, Search, Trash2, X } from 'lucide-react';
+import { ArchiveRestore, Check, ChevronDown, Plus, Search, Trash2, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DataTable } from '../components/DataTable.js';
 import { ErrorState, LoadingState } from '../components/LoadingState.js';
@@ -22,6 +22,14 @@ const taskResource: ResourceConfig = {
 type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
 
 type TaskStatusFilter = 'all' | TaskStatus;
+
+const taskPriorityOptions: Array<{ id: 'all' | TaskPriority; label: string }> = [
+  { id: 'all', label: 'All priorities' },
+  { id: 'urgent', label: 'Urgent' },
+  { id: 'high', label: 'High' },
+  { id: 'normal', label: 'Normal' },
+  { id: 'low', label: 'Low' }
+];
 
 const taskStatusTabs: Array<{ id: TaskStatusFilter; label: string }> = [
   { id: 'all', label: 'All' },
@@ -58,8 +66,20 @@ button.task-status-tab.is-active { border-color: #315c9e; background: linear-gra
 .task-priority-select[data-priority="high"] .task-priority-select__dot { background: #f97316; box-shadow: 0 0 0 4px rgba(249,115,22,.11); }
 .task-priority-select[data-priority="normal"] .task-priority-select__dot { background: #3b82f6; box-shadow: 0 0 0 4px rgba(59,130,246,.11); }
 .task-priority-select[data-priority="low"] .task-priority-select__dot { background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,.11); }
-.task-priority-select select { width: 100%; height: 100%; min-width: 0; padding: 0; border: 0; outline: 0; appearance: none; background: transparent; color: #26364f; font: inherit; font-size: .77rem; font-weight: 750; cursor: pointer; }
-.task-priority-select__chevron { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #7f8ea3; pointer-events: none; }
+.task-priority-trigger { width: 100%; height: 100%; min-width: 0; padding: 0; display: flex; align-items: center; gap: 9px; border: 0; outline: 0; background: transparent; color: #26364f; font: inherit; font-size: .77rem; font-weight: 750; text-align: left; cursor: pointer; }
+.task-priority-trigger__text { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-priority-select__chevron { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #7f8ea3; pointer-events: none; transition: transform .16s ease, color .16s ease; }
+.task-priority-select.is-open .task-priority-select__chevron { transform: translateY(-50%) rotate(180deg); color: #496da7; }
+.task-priority-menu { position: absolute; z-index: 40; top: calc(100% + 9px); right: 0; width: 100%; min-width: 190px; padding: 7px; border: 1px solid #d8e1ec; border-radius: 14px; background: rgba(255,255,255,.98); box-shadow: 0 18px 42px rgba(23,42,70,.16), 0 4px 12px rgba(23,42,70,.08); backdrop-filter: blur(14px); }
+.task-priority-option { width: 100%; min-height: 42px; padding: 0 10px; display: grid; grid-template-columns: 12px minmax(0,1fr) 18px; align-items: center; gap: 9px; border: 0; border-radius: 9px; background: transparent; color: #33445e; font: inherit; font-size: .76rem; font-weight: 750; text-align: left; cursor: pointer; transition: background-color .14s ease, color .14s ease, transform .14s ease; }
+.task-priority-option:hover, .task-priority-option:focus-visible { outline: none; background: #f3f6fb; color: #1f3352; transform: translateX(1px); }
+.task-priority-option.is-selected { background: #edf3fb; color: #274d82; }
+.task-priority-option__dot { width: 9px; height: 9px; border-radius: 50%; background: #94a3b8; box-shadow: 0 0 0 4px rgba(148,163,184,.10); }
+.task-priority-option[data-priority="urgent"] .task-priority-option__dot { background: #dc2626; box-shadow: 0 0 0 4px rgba(220,38,38,.09); }
+.task-priority-option[data-priority="high"] .task-priority-option__dot { background: #f97316; box-shadow: 0 0 0 4px rgba(249,115,22,.10); }
+.task-priority-option[data-priority="normal"] .task-priority-option__dot { background: #3b82f6; box-shadow: 0 0 0 4px rgba(59,130,246,.10); }
+.task-priority-option[data-priority="low"] .task-priority-option__dot { background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,.10); }
+.task-priority-option__check { color: #3d67a2; justify-self: end; }
 
 @media (max-width: 760px) {
   .task-status-tabs { display: flex; grid-template-columns: none; gap: 6px; padding: 6px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
@@ -99,7 +119,6 @@ button.task-status-tab.is-active { border-color: #315c9e; background: linear-gra
   .task-search-form { min-width: 0; }
   .task-priority-filter { flex: 1 1 auto; min-width: 0; }
   .task-priority-select { min-width: 150px; max-width: 100%; }
-  .task-priority-filter select { max-width: 100%; }
   .task-toolbar-actions { width: 100%; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
   .task-toolbar-actions > * { flex: 0 0 auto; }
   .task-toolbar-actions::-webkit-scrollbar { height: 5px; }
@@ -126,6 +145,7 @@ export function TasksPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [activeStatus, setActiveStatus] = useState<TaskStatusFilter>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | TaskPriority>('all');
+  const [priorityMenuOpen, setPriorityMenuOpen] = useState(false);
   useEffect(() => {
     const term = searchInput.trim();
     if (term.length < 2) {
@@ -245,7 +265,7 @@ export function TasksPage() {
           <button className="task-search-all" type="button" onClick={() => applySearch()}>Show all results for “{searchInput.trim()}”</button>
         </div>}
       </div>
-      <label className="task-priority-filter"><span className="task-priority-filter__label">Priority</span><span className="task-priority-select" data-priority={priorityFilter}><span className="task-priority-select__dot" aria-hidden="true" /><select value={priorityFilter} onChange={(event) => { setPriorityFilter(event.target.value as 'all' | TaskPriority); setPage(1); }} aria-label="Filter tasks by priority"><option value="all">All priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select><ChevronDown className="task-priority-select__chevron" size={16} aria-hidden="true" /></span></label>
+      <div className="task-priority-filter" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPriorityMenuOpen(false); }}><span className="task-priority-filter__label">Priority</span><span className={priorityMenuOpen ? 'task-priority-select is-open' : 'task-priority-select'} data-priority={priorityFilter}><button className="task-priority-trigger" type="button" aria-haspopup="listbox" aria-expanded={priorityMenuOpen} onClick={() => setPriorityMenuOpen((open) => !open)}><span className="task-priority-select__dot" aria-hidden="true" /><span className="task-priority-trigger__text">{taskPriorityOptions.find((option) => option.id === priorityFilter)?.label ?? 'All priorities'}</span><ChevronDown className="task-priority-select__chevron" size={16} aria-hidden="true" /></button>{priorityMenuOpen && <div className="task-priority-menu" role="listbox" aria-label="Filter tasks by priority">{taskPriorityOptions.map((option) => <button className={priorityFilter === option.id ? 'task-priority-option is-selected' : 'task-priority-option'} data-priority={option.id} type="button" role="option" aria-selected={priorityFilter === option.id} key={option.id} onClick={() => { setPriorityFilter(option.id); setPage(1); setPriorityMenuOpen(false); }}><span className="task-priority-option__dot" aria-hidden="true" /><span>{option.label}</span>{priorityFilter === option.id ? <Check className="task-priority-option__check" size={15} aria-hidden="true" /> : <span />}</button>)}</div>}</span></div>
       <div className="task-toolbar-actions">{canManage && selectedTaskIds.length > 0 && <><span className="task-selection-count">{selectedTaskIds.length} selected</span><button className="button button--danger button--compact" type="button" onClick={() => { setRecycleError(null); setRecycleConfirmOpen(true); }}><Trash2 size={16} /> Move to recycle</button><button className="text-button" type="button" onClick={() => setSelectedTaskIds([])}>Clear</button></>}{query.data.pagination.total} {isEmployee ? 'in your work circle' : 'visible to you'}</div>
     </div>
     {notice && <p className="task-action-notice" role="status">{notice}</p>}
