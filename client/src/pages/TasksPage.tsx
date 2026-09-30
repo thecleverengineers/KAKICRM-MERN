@@ -67,6 +67,15 @@ button.task-status-tab.is-active { border-color: #315c9e; background: linear-gra
 @media (max-width: 760px) {
   .task-records-responsive .table-scroll table { min-width: 820px; }
   .task-records-responsive .pagination { gap: 12px; overflow-x: auto; white-space: nowrap; }
+  .task-toolbar--records { align-items: stretch; }
+  .task-toolbar--records .task-search-area { flex: 1 1 100%; max-width: none; }
+  .task-search-form { min-width: 0; }
+  .task-priority-filter { flex: 1 1 auto; min-width: 0; }
+  .task-priority-filter select { max-width: 100%; }
+  .task-toolbar-actions { width: 100%; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+  .task-toolbar-actions > * { flex: 0 0 auto; }
+  .task-toolbar-actions::-webkit-scrollbar { height: 5px; }
+  .task-toolbar-actions::-webkit-scrollbar-thumb { border-radius: 999px; background: #c7d3e2; }
 }
 `;
 
