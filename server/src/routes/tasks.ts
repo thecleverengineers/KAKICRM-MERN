@@ -158,9 +158,9 @@ tasksRouter.get('/', asyncHandler(async (req, res) => {
       ...(statusFilter.success ? { status: statusFilter.data } : {}),
       ...(priorityFilter.success ? { priority: priorityFilter.data } : {})
     },
-    // The All tab shows active work only: In Progress → Review → Pending,
-    // then the nearest due date first within each status. Status-specific tabs
-    // keep the existing workflow sort.
+    // Keep task ordering consistent across pagination and tabs:
+    // Due-date bucket → Priority → Status → nearest exact due date.
+    // The All tab still limits results to active work only.
     sort: statusFilter.success ? TASK_STATUS_TAB_SORT : TASK_ALL_TAB_SORT,
     order: req.query.order === 'asc' ? 'asc' : 'desc',
     // Scope before pagination so totals and pages match what the All tab can
