@@ -28,9 +28,9 @@ export interface ListOptions {
 
 /** Sort key used by task lists to keep the workflow order stable across pages. */
 export const TASK_WORKFLOW_SORT = '__task_workflow__';
-/** Sort key used by the Tasks page All tab: active workflow status, then nearest due date. */
+/** Sort key used by the Tasks page All tab: due-date group, priority, status, then nearest exact due date. */
 export const TASK_ALL_TAB_SORT = '__task_all_tab__';
-/** Sort key used by individual task status tabs: priority first, then nearest due date. */
+/** Sort key used by individual task status tabs using the same due-date-first hierarchy. */
 export const TASK_STATUS_TAB_SORT = '__task_status_tab__';
 
 export interface PagedRecords {
@@ -56,7 +56,7 @@ export async function listLegacyRecords(collection: LegacyCollection, options: L
         ...taskAllTabSortStages(),
         { $skip: (page - 1) * limit },
         { $limit: limit },
-        { $project: { __taskStatusRank: 0, __taskDueDateRank: 0, __taskDueDate: 0, __taskPriorityRank: 0 } }
+        { $project: { __taskStatusRank: 0, __taskDueDateRank: 0, __taskDueDate: 0, __taskDueDateDistance: 0, __taskDueDateMissingRank: 0, __taskPriorityRank: 0 } }
       ])
       : statusTabSort
         ? model.aggregate<LegacyRecord>([
@@ -64,7 +64,7 @@ export async function listLegacyRecords(collection: LegacyCollection, options: L
           ...taskStatusTabSortStages(),
           { $skip: (page - 1) * limit },
           { $limit: limit },
-          { $project: { __taskStatusRank: 0, __taskDueDateRank: 0, __taskDueDate: 0, __taskPriorityRank: 0 } }
+          { $project: { __taskStatusRank: 0, __taskDueDateRank: 0, __taskDueDate: 0, __taskDueDateDistance: 0, __taskDueDateMissingRank: 0, __taskPriorityRank: 0 } }
         ])
         : workflowSort
           ? model.aggregate<LegacyRecord>([
@@ -273,6 +273,23 @@ function normalizeField(value: string | undefined): value is string {
 }
 
 function taskStatusTabSortStages(): PipelineStage[] {
+  return taskDueDatePriorityStatusSortStages();
+}
+
+function taskAllTabSortStages(): PipelineStage[] {
+  return taskDueDatePriorityStatusSortStages();
+}
+
+/**
+ * Tasks are ordered by the operational urgency requested by the CRM:
+ * 1) due-date bucket: overdue -> today -> next 7 -> next 15 -> next 30 -> others
+ * 2) priority: urgent -> high -> normal -> low
+ * 3) status: in progress -> review -> pending -> completed -> blocked
+ * 4) exact due-date proximity, so the nearest date inside a bucket appears first
+ *
+ * Missing/invalid due dates belong to "others" and come after dated tasks there.
+ */
+function taskDueDatePriorityStatusSortStages(): PipelineStage[] {
   const status = normalizedTaskFieldExpression('status');
   const priority = normalizedTaskFieldExpression('priority');
   const dueDate = {
@@ -283,18 +300,35 @@ function taskStatusTabSortStages(): PipelineStage[] {
       onNull: null
     }
   };
+  const today = {
+    $dateTrunc: {
+      date: '$$NOW',
+      unit: 'day',
+      timezone: 'Asia/Kolkata'
+    }
+  };
+  const dueDayOffset = {
+    $dateDiff: {
+      startDate: today,
+      endDate: dueDate,
+      unit: 'day',
+      timezone: 'Asia/Kolkata'
+    }
+  };
+  const hasDueDate = { $ne: [dueDate, null] };
 
   return [
     {
       $set: {
-        __taskStatusRank: {
+        __taskDueDate: dueDate,
+        __taskDueDateRank: {
           $switch: {
             branches: [
-              { case: { $in: [status, ['in_progress', 'active', 'working_on']] }, then: 0 },
-              { case: { $in: [status, ['review', 'in_review']] }, then: 1 },
-              { case: { $in: [status, ['pending']] }, then: 2 },
-              { case: { $in: [status, ['completed', 'complete', 'done']] }, then: 3 },
-              { case: { $in: [status, ['blocked']] }, then: 4 }
+              { case: { $and: [hasDueDate, { $lt: [dueDayOffset, 0] }] }, then: 0 },
+              { case: { $and: [hasDueDate, { $eq: [dueDayOffset, 0] }] }, then: 1 },
+              { case: { $and: [hasDueDate, { $gte: [dueDayOffset, 1] }, { $lte: [dueDayOffset, 7] }] }, then: 2 },
+              { case: { $and: [hasDueDate, { $gte: [dueDayOffset, 8] }, { $lte: [dueDayOffset, 15] }] }, then: 3 },
+              { case: { $and: [hasDueDate, { $gte: [dueDayOffset, 16] }, { $lte: [dueDayOffset, 30] }] }, then: 4 }
             ],
             default: 5
           }
@@ -310,68 +344,35 @@ function taskStatusTabSortStages(): PipelineStage[] {
             default: 2
           }
         },
-        __taskDueDate: dueDate,
-        __taskDueDateRank: { $cond: [{ $eq: [dueDate, null] }, 1, 0] }
-      }
-    },
-    {
-      $sort: {
-        __taskStatusRank: 1,
-        __taskPriorityRank: 1,
-        __taskDueDateRank: 1,
-        __taskDueDate: 1,
-        updatedAt: -1,
-        legacyId: -1
-      }
-    }
-  ];
-}
-
-function taskAllTabSortStages(): PipelineStage[] {
-  const status = normalizedTaskFieldExpression('status');
-  const priority = normalizedTaskFieldExpression('priority');
-  const dueDate = {
-    $convert: {
-      input: '$raw.due_date',
-      to: 'date',
-      onError: null,
-      onNull: null
-    }
-  };
-
-  return [
-    {
-      $set: {
         __taskStatusRank: {
           $switch: {
             branches: [
               { case: { $in: [status, ['in_progress', 'active', 'working_on']] }, then: 0 },
               { case: { $in: [status, ['review', 'in_review']] }, then: 1 },
-              { case: { $in: [status, ['pending']] }, then: 2 }
+              { case: { $in: [status, ['pending']] }, then: 2 },
+              { case: { $in: [status, ['completed', 'complete', 'done']] }, then: 3 },
+              { case: { $in: [status, ['blocked']] }, then: 4 }
             ],
-            default: 3
+            default: 5
           }
         },
-        __taskDueDate: dueDate,
-        __taskDueDateRank: { $cond: [{ $eq: [dueDate, null] }, 1, 0] },
-        __taskPriorityRank: {
-          $switch: {
-            branches: [
-              { case: { $in: [priority, ['urgent']] }, then: 0 },
-              { case: { $in: [priority, ['high']] }, then: 1 },
-              { case: { $in: [priority, ['normal']] }, then: 2 },
-              { case: { $in: [priority, ['low']] }, then: 3 }
-            ],
-            default: 2
-          }
+        __taskDueDateMissingRank: { $cond: [hasDueDate, 0, 1] },
+        __taskDueDateDistance: {
+          $cond: [
+            hasDueDate,
+            { $abs: dueDayOffset },
+            999999
+          ]
         }
       }
     },
     {
       $sort: {
-        __taskStatusRank: 1,
-        __taskPriorityRank: 1,
         __taskDueDateRank: 1,
+        __taskPriorityRank: 1,
+        __taskStatusRank: 1,
+        __taskDueDateMissingRank: 1,
+        __taskDueDateDistance: 1,
         __taskDueDate: 1,
         updatedAt: -1,
         legacyId: -1
