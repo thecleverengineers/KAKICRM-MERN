@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Bell, CalendarClock, CheckSquare, ChevronDown, KeyRound, LayoutDashboard, LogOut, Menu, MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, Sun, UserRound, X } from 'lucide-react';
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { navigation } from '../config/resources.js';
@@ -40,6 +40,10 @@ export function AppShell() {
   useEffect(() => {
     setOpen(false);
     setProfileMenuOpen(false);
+  }, [location.pathname]);
+
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, [location.pathname]);
 
   useEffect(() => {

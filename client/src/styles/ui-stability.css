@@ -471,3 +471,306 @@ textarea,
     transition-duration: .01ms !important;
   }
 }
+
+/* CRM-wide layout hardening.
+ * These rules intentionally live in the final stability layer so older
+ * page-specific styles cannot reintroduce common overflow and jump issues.
+ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  overflow-y: scroll;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100dvh;
+}
+
+.app-frame {
+  min-height: 100dvh;
+  overflow-x: clip;
+}
+
+.main-content {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
+  transition: width .2s ease, margin-left .2s ease;
+}
+
+.page-container {
+  min-width: 0;
+  max-width: 100%;
+  overflow-anchor: none;
+}
+
+.page-container > * {
+  max-width: 100%;
+}
+
+:where(
+  [class$="-grid"],
+  [class*="-grid "],
+  [class$="-layout"],
+  [class*="-layout "]
+) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:where(
+  [class$="-grid"],
+  [class*="-grid "],
+  [class$="-layout"],
+  [class*="-layout "]
+) > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:where(
+  [class$="-card"],
+  [class*="-card "],
+  [class$="-panel"],
+  [class*="-panel "]
+) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.page-header,
+.card-heading,
+.section-heading,
+.toolbar,
+.inline-form,
+.compact-form,
+.modal-header,
+.modal-actions {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.toolbar,
+.card-heading,
+.section-heading {
+  flex-wrap: wrap;
+}
+
+.page-actions {
+  flex: 0 1 auto;
+}
+
+.page-description,
+.card-heading p,
+.section-heading p,
+.record-detail-list dd,
+.notification-row,
+.simple-list li,
+.activity-copy,
+.chat-bubble,
+.invoice-profile-switcher__details,
+.backup-drive-connected {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.field,
+.field--wide,
+.toggle-field {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.field > :is(input, select, textarea),
+.compact-form :is(input, select, textarea),
+.inline-form :is(input, select, textarea) {
+  width: 100%;
+  max-width: 100%;
+}
+
+pre {
+  max-width: 100%;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.table-card,
+.table-scroll {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.table-scroll {
+  position: relative;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.table-scroll > table {
+  max-width: none;
+}
+
+.loading-state,
+.error-state,
+.empty-state {
+  min-width: 0;
+  max-width: 100%;
+  min-height: clamp(180px, 28vh, 300px);
+}
+
+.loading-state {
+  contain: layout;
+}
+
+.global-search-results,
+.profile-menu-panel,
+.task-search-suggestions,
+.task-priority-menu,
+.search-autocomplete-menu {
+  max-width: min(440px, calc(100vw - 24px));
+}
+
+.modal-backdrop {
+  z-index: 500 !important;
+}
+
+.vault-dialog-backdrop {
+  z-index: 600 !important;
+}
+
+.modal-backdrop,
+.vault-dialog-backdrop,
+.backup-modal,
+.clara-voice-backdrop,
+.ceo-command-backdrop {
+  max-width: 100vw;
+  max-height: 100dvh;
+}
+
+.modal,
+.vault-dialog,
+.backup-modal > *,
+.clara-voice-dialog,
+.ceo-command-dialog {
+  min-width: 0;
+  max-width: min(100%, calc(100vw - 20px));
+  max-height: calc(100dvh - 20px);
+}
+
+.modal form,
+.modal .form-grid {
+  min-width: 0;
+  max-width: 100%;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 900px) {
+  .main-content,
+  .app-frame--sidebar-hidden .main-content {
+    width: 100%;
+    margin-left: 0;
+    transition: none;
+  }
+
+  .page-header {
+    width: 100%;
+  }
+
+  .page-actions {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  .page-container {
+    width: 100%;
+    max-width: 100%;
+    padding-bottom: calc(92px + env(safe-area-inset-bottom));
+  }
+
+  .toolbar,
+  .card-heading,
+  .section-heading,
+  .inline-form,
+  .compact-form {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .table-scroll {
+    width: 100%;
+    max-width: 100%;
+    scrollbar-width: thin;
+  }
+
+  .mobile-appbar {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+}
+
+@media (max-width: 620px) {
+  .page-header {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .page-actions > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .global-search-results,
+  .profile-menu-panel {
+    max-width: calc(100vw - 20px);
+  }
+
+  .modal-backdrop,
+  .vault-dialog-backdrop,
+  .backup-modal,
+  .clara-voice-backdrop,
+  .ceo-command-backdrop {
+    padding: 10px;
+  }
+}
+
+@media (max-width: 620px) and (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+@media (hover: none) {
+  :where(
+    .button,
+    .icon-button,
+    .mobile-appbar-link,
+    .metric-card,
+    .content-card,
+    .archive-card,
+    .department-project-card,
+    .kanban-project-card,
+    .kanban-task-card,
+    .dashboard-action,
+    .dashboard-task-card
+  ):hover {
+    transform: none !important;
+  }
+}
+
