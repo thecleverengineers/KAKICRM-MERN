@@ -35,7 +35,6 @@ import { ProjectsPage } from './pages/ProjectsPage.js';
 import { ProjectWorkspacePage } from './pages/ProjectWorkspacePage.js';
 import { ProfilePage } from './pages/ProfilePage.js';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage.js';
-import { PublicHomePage } from './pages/PublicHomePage.js';
 import { PayrollPage } from './pages/PayrollPage.js';
 import { RecordDetailPage } from './pages/RecordDetailPage.js';
 import { RemoteWorkPage } from './pages/RemoteWorkPage.js';
@@ -49,7 +48,7 @@ import { useAuth } from './store/auth.js';
 
 export function App() {
   return <Routes>
-    <Route path="/" element={<PublicHomePage />} />
+    <Route path="/" element={<Navigate to="/login" replace />} />
     <Route path="/privacy" element={<PrivacyPolicyPage />} />
     <Route path="/login" element={<LoginPage />} />
     <Route element={<ProtectedScreen><AppShell /></ProtectedScreen>}>
