@@ -94,6 +94,7 @@ const taskStatusSchema = z.object({
 });
 const taskListStatusSchema = z.enum(['pending', 'in_progress', 'review', 'completed', 'blocked']);
 const taskListPrioritySchema = z.enum(['low', 'normal', 'high', 'urgent']);
+const taskListDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const taskAssigneeSearchFields = ['assignee_id', 'assignee_ids', 'assignee_user_id', 'assigned_to', 'assigned_to_id', 'assigned_user_id', 'assigned_user_ids'] as const;
 
 export const tasksRouter = Router();
@@ -114,6 +115,8 @@ tasksRouter.get('/', asyncHandler(async (req, res) => {
   const taskScope = employeeOnly ? await taskVisibilityScopeWithRelationships(req.auth!.legacyId) : undefined;
   const statusFilter = taskListStatusSchema.safeParse(req.query.status);
   const priorityFilter = taskListPrioritySchema.safeParse(req.query.priority);
+  const dueFromFilter = taskListDateSchema.safeParse(req.query.dueFrom);
+  const dueToFilter = taskListDateSchema.safeParse(req.query.dueTo);
   const activeAllScope = {
     $or: [
       { 'raw.status': { $in: ['in_progress', 'active', 'working_on', 'review', 'in_review', 'pending'] } },
@@ -122,11 +125,23 @@ tasksRouter.get('/', asyncHandler(async (req, res) => {
       { 'raw.status': '' }
     ]
   };
-  const listScope = statusFilter.success
+  const baseListScope = statusFilter.success
     ? taskScope
     : taskScope
       ? { $and: [taskScope, activeAllScope] }
       : activeAllScope;
+  const dueDateBounds = {
+    ...(dueFromFilter.success ? { $gte: dueFromFilter.data } : {}),
+    ...(dueToFilter.success ? { $lte: dueToFilter.data } : {})
+  };
+  const dueDateScope = dueFromFilter.success || dueToFilter.success
+    ? { 'raw.due_date': dueDateBounds }
+    : undefined;
+  const listScope = dueDateScope
+    ? baseListScope
+      ? { $and: [baseListScope, dueDateScope] }
+      : dueDateScope
+    : baseListScope;
   const searchTerm = typeof req.query.search === 'string' ? req.query.search.trim() : '';
   const matchingAssigneeIds = searchTerm ? await assigneeIdsByName(searchTerm) : [];
   const assigneeValues = matchingAssigneeIds.flatMap((id) => [id, String(id)]);
