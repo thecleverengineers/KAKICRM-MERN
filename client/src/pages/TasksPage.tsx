@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArchiveRestore, CalendarDays, Check, ChevronDown, Plus, Search, Trash2, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { TaskFriendlyList } from '../components/TaskFriendlyList.js';
@@ -131,6 +131,9 @@ button.task-status-tab.is-active { border-bottom-color: #315c9e; background: rgb
 .task-custom-date-range .field { flex: 1 1 170px; }
 .task-custom-date-range .field input { background: #fff; }
 .task-custom-date-range__copy { flex: 0 0 auto; padding-bottom: 10px; color: #8190a3; font-size: .68rem; }
+.task-filter-refreshing { display: inline-flex; align-items: center; margin-right: 8px; color: #55739d; font-size: .68rem; font-weight: 800; }
+.task-filter-refreshing::before { content: ''; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: currentColor; animation: taskFilterPulse 1s ease-in-out infinite; }
+@keyframes taskFilterPulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
 
 @media (max-width: 760px) {
   .task-status-tabs { display: flex; grid-template-columns: none; gap: 6px; padding: 6px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
@@ -208,6 +211,7 @@ export function TasksPage() {
   const statusCountsQuery = useQuery({
     queryKey: ['task-status-counts', dueDateRange.dueFrom ?? '', dueDateRange.dueTo ?? ''],
     staleTime: 30_000,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const counts = await Promise.all(taskStatusTabs.map(async (tab) => {
         const result = await api<Paginated<PublicRecord>>(`/tasks${queryString({
@@ -255,12 +259,14 @@ export function TasksPage() {
       ...(activeStatus !== 'all' ? { status: activeStatus } : {}),
       ...(priorityFilter !== 'all' ? { priority: priorityFilter } : {}),
       ...dueDateRange
-    })}`)
+    })}`),
+    placeholderData: keepPreviousData
   });
   const suggestionsQuery = useQuery({
     queryKey: ['task-suggestions', suggestionTerm, activeStatus, priorityFilter, dueDateRange.dueFrom ?? '', dueDateRange.dueTo ?? ''],
     enabled: searchOpen && suggestionTerm.length >= 1,
     staleTime: 30_000,
+    placeholderData: keepPreviousData,
     queryFn: () => api<Paginated<PublicRecord>>(`/tasks${queryString({
       page: 1,
       limit: 6,
@@ -379,7 +385,7 @@ export function TasksPage() {
       </div>
       <div className="task-priority-filter" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPriorityMenuOpen(false); }}><span className="task-priority-filter__label">Priority</span><span className={priorityMenuOpen ? 'task-priority-select is-open' : 'task-priority-select'} data-priority={priorityFilter}><button className="task-priority-trigger" type="button" aria-haspopup="listbox" aria-expanded={priorityMenuOpen} onClick={() => setPriorityMenuOpen((open) => !open)}><span className="task-priority-select__dot" aria-hidden="true" /><span className="task-priority-trigger__text">{taskPriorityOptions.find((option) => option.id === priorityFilter)?.label ?? 'All priorities'}</span><ChevronDown className="task-priority-select__chevron" size={16} aria-hidden="true" /></button>{priorityMenuOpen && <div className="task-priority-menu" role="listbox" aria-label="Filter tasks by priority">{taskPriorityOptions.map((option) => <button className={priorityFilter === option.id ? 'task-priority-option is-selected' : 'task-priority-option'} data-priority={option.id} type="button" role="option" aria-selected={priorityFilter === option.id} key={option.id} onClick={() => { setPriorityFilter(option.id); setPage(1); setPriorityMenuOpen(false); }}><span className="task-priority-option__dot" aria-hidden="true" /><span>{option.label}</span>{priorityFilter === option.id ? <Check className="task-priority-option__check" size={15} aria-hidden="true" /> : <span />}</button>)}</div>}</span></div>
       <div className="task-date-filter"><div className="task-date-filter__wrap"><CalendarDays size={16} aria-hidden="true" /><select className="task-date-filter__control" value={dateFilter} aria-label="Filter tasks by due date" onChange={(event) => { setDateFilter(event.target.value as TaskDateFilter); setPage(1); }}>{taskDateOptions.map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select><ChevronDown size={15} aria-hidden="true" /></div></div>
-      <div className="task-toolbar-actions">{canManage && selectedTaskIds.length > 0 && <><span className="task-selection-count">{selectedTaskIds.length} selected</span><button className="button button--danger button--compact" type="button" onClick={() => { setRecycleError(null); setRecycleConfirmOpen(true); }}><Trash2 size={16} /> Move to recycle</button><button className="text-button" type="button" onClick={() => setSelectedTaskIds([])}>Clear</button></>}{query.data.pagination.total} {isEmployee ? 'in your work circle' : 'visible to you'}</div>
+      <div className="task-toolbar-actions">{canManage && selectedTaskIds.length > 0 && <><span className="task-selection-count">{selectedTaskIds.length} selected</span><button className="button button--danger button--compact" type="button" onClick={() => { setRecycleError(null); setRecycleConfirmOpen(true); }}><Trash2 size={16} /> Move to recycle</button><button className="text-button" type="button" onClick={() => setSelectedTaskIds([])}>Clear</button></>}{query.isFetching && !query.isPending && <span className="task-filter-refreshing" role="status" aria-live="polite">Updating…</span>}{query.data.pagination.total} {isEmployee ? 'in your work circle' : 'visible to you'}</div>
     </div>
     {dateFilter === 'custom' && <div className="task-custom-date-range" aria-label="Custom due date range">
       <label className="field"><span>Due from</span><input type="date" value={customDateFrom} max={customDateTo || undefined} onChange={(event) => { setCustomDateFrom(event.target.value); setPage(1); }} /></label>
