@@ -1,0 +1,473 @@
+/*
+ * KAKI CRM UI stability layer
+ * Loaded after the legacy/global stylesheet so structural fixes stay centralized.
+ * Keep this file focused on layout safety, responsive behavior, stacking and
+ * interaction stability; page-specific visual themes remain in their own CSS.
+ */
+
+html {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
+@supports (overflow: clip) {
+  html,
+  body,
+  #root {
+    overflow-x: clip;
+  }
+}
+
+body {
+  overscroll-behavior-x: none;
+}
+
+#root {
+  isolation: isolate;
+}
+
+img,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+button,
+input,
+textarea,
+select {
+  min-width: 0;
+  max-width: 100%;
+}
+
+textarea,
+.page-description,
+.muted-copy,
+.form-error {
+  overflow-wrap: anywhere;
+}
+
+.app-frame,
+.main-content,
+.page-container {
+  min-width: 0;
+}
+
+.app-frame {
+  width: 100%;
+  max-width: 100%;
+}
+
+.main-content {
+  max-width: 100%;
+}
+
+.page-container {
+  width: 100%;
+}
+
+.page-container > *,
+.page-header > *,
+.card-heading > *,
+.section-heading > *,
+.toolbar > *,
+.form-grid > *,
+.modal-header > * {
+  min-width: 0;
+}
+
+.sidebar {
+  height: 100dvh;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+.side-nav {
+  min-height: 0;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sidebar-footer {
+  flex: 0 0 auto;
+}
+
+.sidebar-overlay {
+  touch-action: none;
+}
+
+.topbar {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.topbar > * {
+  min-width: 0;
+}
+
+.topbar-spacer {
+  min-width: 0;
+}
+
+.global-search {
+  min-width: 0;
+  flex: 0 1 360px;
+}
+
+.global-search-results,
+.profile-menu-panel {
+  z-index: 250;
+}
+
+.profile-menu {
+  flex: 0 0 auto;
+}
+
+.page-header > div:first-child {
+  min-width: 0;
+}
+
+.page-actions {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.content-card,
+.table-card,
+.metric-card {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.table-card {
+  width: 100%;
+}
+
+.table-scroll {
+  max-width: 100%;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+
+.table-scroll table {
+  margin: 0;
+}
+
+.truncate-cell {
+  max-width: 100%;
+}
+
+.pagination {
+  max-width: 100%;
+}
+
+.field,
+.toggle-field,
+.field input,
+.field textarea,
+.field select,
+.new-conversation select,
+.compact-form input,
+.inline-form textarea,
+.chat-compose input {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.field input[type="file"] {
+  height: auto;
+  min-height: 39px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  overflow: hidden;
+}
+
+.field select[multiple] {
+  height: auto;
+  min-height: 118px;
+}
+
+.modal-backdrop {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.modal {
+  max-width: 100%;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.modal-header h2 {
+  overflow-wrap: anywhere;
+}
+
+.modal-actions {
+  flex-wrap: wrap;
+}
+
+@supports selector(body:has(*)) {
+  body:has(.modal-backdrop),
+  body:has(.vault-dialog-backdrop),
+  body:has(.backup-modal) {
+    overflow: hidden;
+  }
+}
+
+/* Keep custom menus above cards/tables and prevent ancestor toolbars from clipping them. */
+.task-toolbar,
+.task-search-area,
+.task-priority-filter,
+.task-priority-select {
+  overflow: visible;
+}
+
+.task-toolbar {
+  position: relative;
+  z-index: 6;
+}
+
+.task-search-area {
+  position: relative;
+  z-index: 8;
+}
+
+.task-priority-filter,
+.task-priority-select {
+  position: relative;
+  z-index: 7;
+}
+
+.task-search-suggestions,
+.task-priority-menu {
+  z-index: 500 !important;
+  max-height: min(60vh, 360px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/* Reusable flex/grid children should be allowed to shrink instead of widening the viewport. */
+:where(
+  .metric-grid,
+  .dashboard-grid,
+  .attendance-grid,
+  .invoice-actions-grid,
+  .task-layout,
+  .record-detail-list,
+  .archive-grid,
+  .employee-workspace-layout,
+  .employee-assignment-grid,
+  .employee-insights-grid,
+  .department-projects-grid,
+  .backup-status-grid,
+  .backup-drive-connected,
+  .ceo-ai-capability-grid
+) > * {
+  min-width: 0;
+}
+
+/* Long labels, IDs and uploaded file names must wrap rather than force horizontal overflow. */
+:where(
+  .record-detail-list dd,
+  .profile-asset-upload,
+  .backup-drive-connected strong,
+  .backup-drive-connected span,
+  .invoice-profile-switcher__details,
+  .task-recycle-note
+) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (hover: none) {
+  .button:hover:not(:disabled),
+  .archive-card:hover,
+  .department-project-card:hover,
+  .kanban-project-card:hover,
+  .kanban-task-card:hover {
+    transform: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .main-content {
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+  }
+
+  .topbar {
+    padding-right: 14px;
+    padding-left: 14px;
+    gap: 8px;
+  }
+
+  .page-container {
+    max-width: 100%;
+  }
+
+  .sidebar {
+    width: min(285px, 88vw);
+  }
+}
+
+@media (max-width: 760px) {
+  .mobile-appbar {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .mobile-appbar-link {
+    overflow: hidden;
+  }
+
+  .mobile-appbar-link span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .task-status-tabs,
+  .task-toolbar-actions {
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 620px) {
+  .topbar {
+    height: 60px;
+    padding-right: 10px;
+    padding-left: 10px;
+    gap: 6px;
+  }
+
+  .topbar-spacer {
+    display: none;
+  }
+
+  .global-search {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .global-search-results {
+    right: 0;
+    left: auto;
+    max-width: calc(100vw - 20px);
+  }
+
+  .page-container {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .page-actions {
+    width: 100%;
+  }
+
+  .page-actions > .button {
+    flex: 1 1 140px;
+  }
+
+  .toolbar,
+  .advanced-search-main,
+  .task-toolbar {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .pagination {
+    min-height: 52px;
+    padding: 10px 12px;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+
+  .pagination > div {
+    margin-left: auto;
+  }
+
+  .modal-backdrop {
+    padding: 10px;
+    align-items: end;
+  }
+
+  .modal {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+    padding: 18px;
+    border-radius: 18px 18px 10px 10px;
+  }
+
+  .modal-actions > .button {
+    flex: 1 1 120px;
+  }
+
+  .profile-menu-panel {
+    max-width: calc(100vw - 20px);
+  }
+}
+
+@media (max-width: 420px) {
+  .page-container {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .topbar .icon-button {
+    width: 32px;
+    height: 32px;
+  }
+
+  .topbar-profile-trigger {
+    min-height: 34px;
+    padding-right: 2px;
+  }
+
+  .global-search-input {
+    padding-right: 7px;
+    padding-left: 7px;
+  }
+
+  .global-search-results {
+    width: calc(100vw - 20px);
+  }
+
+  .modal-header {
+    gap: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

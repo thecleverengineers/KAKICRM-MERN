@@ -37,6 +37,44 @@ export function AppShell() {
     applyTheme(theme);
   }, [theme]);
 
+  useEffect(() => {
+    setOpen(false);
+    setProfileMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!open) return;
+    const mobileViewport = window.matchMedia('(max-width: 900px)');
+    if (!mobileViewport.matches) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleViewportChange = (event: MediaQueryListEvent) => {
+      if (!event.matches) setOpen(false);
+    };
+    mobileViewport.addEventListener('change', handleViewportChange);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      mobileViewport.removeEventListener('change', handleViewportChange);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    const closeOnPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && !target.closest('.profile-menu')) setProfileMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setProfileMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnPointerDown);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnPointerDown);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [profileMenuOpen]);
+
   const handleLogout = async () => {
     await logout();
     navigate('/login', { replace: true });
