@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArchiveRestore, Check, ChevronDown, Plus, Search, Trash2, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { DataTable } from '../components/DataTable.js';
+import { TaskFriendlyList } from '../components/TaskFriendlyList.js';
 import { ErrorState, LoadingState } from '../components/LoadingState.js';
 import { PageHeader } from '../components/PageHeader.js';
 import { RecordFormDialog } from '../components/RecordFormDialog.js';
@@ -12,6 +12,7 @@ import { api, type Paginated, type PublicRecord, queryString } from '../lib/api.
 import { type TaskStatus } from '../lib/projects.js';
 import { useAuth } from '../store/auth.js';
 import '../styles/task-kanban.css';
+import '../styles/task-friendly.css';
 
 const taskResource: ResourceConfig = {
   id: 'tasks', label: 'Tasks', singular: 'Task', description: 'Assignments, workload, daily updates, discussions, files and time tracking.', icon: Plus, permission: 'task.view',
@@ -146,6 +147,22 @@ export function TasksPage() {
   const [activeStatus, setActiveStatus] = useState<TaskStatusFilter>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | TaskPriority>('all');
   const [priorityMenuOpen, setPriorityMenuOpen] = useState(false);
+  const [statusUpdatingId, setStatusUpdatingId] = useState<number | null>(null);
+  const statusCountsQuery = useQuery({
+    queryKey: ['task-status-counts'],
+    staleTime: 30_000,
+    queryFn: async () => {
+      const counts = await Promise.all(taskStatusTabs.map(async (tab) => {
+        const result = await api<Paginated<PublicRecord>>(`/tasks${queryString({
+          page: 1,
+          limit: 1,
+          ...(tab.id !== 'all' ? { status: tab.id } : {})
+        })}`);
+        return [tab.id, result.pagination.total] as const;
+      }));
+      return Object.fromEntries(counts) as Record<TaskStatusFilter, number>;
+    }
+  });
   useEffect(() => {
     const term = searchInput.trim();
     if (term.length < 2) {
@@ -206,6 +223,7 @@ export function TasksPage() {
   const invalidateTaskViews = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+      queryClient.invalidateQueries({ queryKey: ['task-status-counts'] }),
       queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] }),
       queryClient.invalidateQueries({ queryKey: ['project-departments'] }),
       queryClient.invalidateQueries({ queryKey: ['department-project-board'] }),
@@ -218,6 +236,21 @@ export function TasksPage() {
   const create = async (fields: Record<string, unknown>) => {
     await api('/tasks', { method: 'POST', body: JSON.stringify(fields) });
     await invalidateTaskViews();
+  };
+
+  const updateTaskStatus = async (taskId: number, status: TaskStatus) => {
+    if (statusUpdatingId === taskId) return;
+    setStatusUpdatingId(taskId);
+    setNotice(null);
+    try {
+      await api(`/tasks/${taskId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+      setNotice(`Task status changed to ${status.replace(/_/g, ' ')}.`);
+      await invalidateTaskViews();
+    } catch (problem) {
+      setNotice(problem instanceof Error ? problem.message : 'The task status could not be updated.');
+    } finally {
+      setStatusUpdatingId(null);
+    }
   };
 
   const recycleSelected = async () => {
@@ -242,9 +275,13 @@ export function TasksPage() {
   };
 
   return <><style>{taskStatusTabsStyle}</style>
-    <PageHeader eyebrow="WORK MANAGEMENT" title="Tasks" description={isEmployee ? 'Tasks you own, are assigned to, mentioned in, or tagged in are shown here. You can assign work to one or more employees.' : 'Keep projects moving with ownership, progress updates, task chat and time logs.'} actions={canCreate ? <><>{canManage && <button className="button button--secondary" onClick={() => setRecycleBinOpen(true)}><ArchiveRestore size={17} /> Task recycle</button>}</><button className="button" onClick={() => setCreateOpen(true)}><Plus size={17} /> New task</button></> : undefined} />
+    <PageHeader eyebrow="WORK MANAGEMENT" title="Tasks" description={isEmployee ? 'See what needs attention, update progress quickly and keep your assigned work moving.' : 'See what needs attention, assign work and move tasks through the workflow without digging through a dense table.'} actions={canCreate ? <><>{canManage && <button className="button button--secondary" onClick={() => setRecycleBinOpen(true)}><ArchiveRestore size={17} /> Task recycle</button>}</><button className="button" onClick={() => setCreateOpen(true)}><Plus size={17} /> New task</button></> : undefined} />
     <div className="task-status-tabs" role="tablist" aria-label="Tasks by status">
-      {taskStatusTabs.map((tab) => <button className={activeStatus === tab.id ? 'task-status-tab is-active' : 'task-status-tab'} data-status={tab.id} key={tab.id} type="button" role="tab" aria-selected={activeStatus === tab.id} onClick={() => { setActiveStatus(tab.id); setPage(1); }}><span className="task-status-tab__dot" aria-hidden="true" /><span>{tab.label}</span></button>)}
+      {taskStatusTabs.map((tab) => <button className={activeStatus === tab.id ? 'task-status-tab is-active' : 'task-status-tab'} data-status={tab.id} key={tab.id} type="button" role="tab" aria-selected={activeStatus === tab.id} onClick={() => { setActiveStatus(tab.id); setPage(1); }}>
+        <span className="task-status-tab__dot" aria-hidden="true" />
+        <span>{tab.label}</span>
+        <span className="task-status-count" aria-label={`${statusCountsQuery.data?.[tab.id] ?? 0} tasks`}>{statusCountsQuery.isPending ? '·' : statusCountsQuery.data?.[tab.id] ?? 0}</span>
+      </button>)}
     </div>
     <div className="toolbar task-toolbar task-toolbar--records">
       <div className="task-search-area" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setSearchOpen(false); }}>
@@ -268,10 +305,26 @@ export function TasksPage() {
       <div className="task-priority-filter" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPriorityMenuOpen(false); }}><span className="task-priority-filter__label">Priority</span><span className={priorityMenuOpen ? 'task-priority-select is-open' : 'task-priority-select'} data-priority={priorityFilter}><button className="task-priority-trigger" type="button" aria-haspopup="listbox" aria-expanded={priorityMenuOpen} onClick={() => setPriorityMenuOpen((open) => !open)}><span className="task-priority-select__dot" aria-hidden="true" /><span className="task-priority-trigger__text">{taskPriorityOptions.find((option) => option.id === priorityFilter)?.label ?? 'All priorities'}</span><ChevronDown className="task-priority-select__chevron" size={16} aria-hidden="true" /></button>{priorityMenuOpen && <div className="task-priority-menu" role="listbox" aria-label="Filter tasks by priority">{taskPriorityOptions.map((option) => <button className={priorityFilter === option.id ? 'task-priority-option is-selected' : 'task-priority-option'} data-priority={option.id} type="button" role="option" aria-selected={priorityFilter === option.id} key={option.id} onClick={() => { setPriorityFilter(option.id); setPage(1); setPriorityMenuOpen(false); }}><span className="task-priority-option__dot" aria-hidden="true" /><span>{option.label}</span>{priorityFilter === option.id ? <Check className="task-priority-option__check" size={15} aria-hidden="true" /> : <span />}</button>)}</div>}</span></div>
       <div className="task-toolbar-actions">{canManage && selectedTaskIds.length > 0 && <><span className="task-selection-count">{selectedTaskIds.length} selected</span><button className="button button--danger button--compact" type="button" onClick={() => { setRecycleError(null); setRecycleConfirmOpen(true); }}><Trash2 size={16} /> Move to recycle</button><button className="text-button" type="button" onClick={() => setSelectedTaskIds([])}>Clear</button></>}{query.data.pagination.total} {isEmployee ? 'in your work circle' : 'visible to you'}</div>
     </div>
+    {(search || priorityFilter !== 'all') && <div className="task-active-filters" aria-label="Active task filters">
+      {search && <span className="task-active-filter">Search: {search}<button type="button" aria-label="Clear search" onClick={() => { setSearch(''); setSearchInput(''); setPage(1); }}>×</button></span>}
+      {priorityFilter !== 'all' && <span className="task-active-filter">Priority: {taskPriorityOptions.find((option) => option.id === priorityFilter)?.label}<button type="button" aria-label="Clear priority filter" onClick={() => { setPriorityFilter('all'); setPage(1); }}>×</button></span>}
+      <button className="task-clear-filters" type="button" onClick={() => { setSearch(''); setSearchInput(''); setPriorityFilter('all'); setPage(1); }}>Clear filters</button>
+    </div>}
     {notice && <p className="task-action-notice" role="status">{notice}</p>}
-    <div className="task-records-responsive">
-      <DataTable records={query.data.data} columns={taskResource.columns} resource={taskResource} page={query.data.pagination.page} pages={query.data.pagination.pages} total={query.data.pagination.total} onPageChange={setPage} onOpen={(record) => navigate('/tasks/' + record.legacyId)} clickableRows selectable={canManage} selectedLegacyIds={selectedTaskIds} onSelectedLegacyIdsChange={setSelectedTaskIds} emptyTitle={activeStatus === 'all' ? 'No tasks found' : 'No tasks in this status'} />
-    </div>
+    <TaskFriendlyList
+      records={query.data.data}
+      page={query.data.pagination.page}
+      pages={query.data.pagination.pages}
+      total={query.data.pagination.total}
+      onPageChange={setPage}
+      onOpen={(record) => { if (record.legacyId) navigate('/tasks/' + record.legacyId); }}
+      selectable={canManage}
+      selectedLegacyIds={selectedTaskIds}
+      onSelectedLegacyIdsChange={setSelectedTaskIds}
+      onStatusChange={updateTaskStatus}
+      statusUpdatingId={statusUpdatingId}
+      emptyTitle={activeStatus === 'all' ? 'You’re all caught up' : 'No tasks in this status'}
+    />
     <RecordFormDialog open={createOpen} resource={taskResource} initialFields={initialTaskFields} onClose={() => setCreateOpen(false)} onSubmit={create} />
     <TaskRecycleBinDialog open={recycleBinOpen} onClose={() => setRecycleBinOpen(false)} onRestored={async (restoredCount) => { setNotice(`${restoredCount} task${restoredCount === 1 ? '' : 's'} restored from Task Recycle.`); await invalidateTaskViews(); }} />
     {recycleConfirmOpen && <TaskRecycleConfirmDialog count={selectedTaskIds.length} recycling={recycling} error={recycleError} onClose={() => { if (!recycling) setRecycleConfirmOpen(false); }} onConfirm={() => void recycleSelected()} />}
