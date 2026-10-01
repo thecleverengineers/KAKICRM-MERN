@@ -274,9 +274,9 @@ billingRouter.get('/invoices/:invoiceId', requireInvoiceView, asyncHandler(async
   res.json(await invoiceDetail(invoiceId(req.params.invoiceId)));
 }));
 
-// Changing the issuer on an existing invoice only updates that invoice's
-// reference. The selected billing profile itself is never edited, so its
-// logo, signature, QR settings, GST and bank configuration remain intact.
+// Changing the issuer on an existing invoice keeps the selected billing
+// profile immutable, but the invoice must adopt that profile's GST mode.
+// This prevents GST from a previous issuer remaining on a non-GST profile.
 billingRouter.patch('/invoices/:invoiceId/billing-profile', requireInvoiceBillingProfileChange, asyncHandler(async (req, res) => {
   const id = invoiceId(req.params.invoiceId);
   const input = billingProfileChangeSchema.parse(req.body);
@@ -284,20 +284,30 @@ billingRouter.patch('/invoices/:invoiceId/billing-profile', requireInvoiceBillin
   if (!invoice) throw new HttpError(404, 'Invoice not found.');
   const profile = await findLegacyRecord('billing_profiles', input.billing_profile_id);
   if (!profile) throw new HttpError(404, 'Select an active billing profile.');
+
   const currentProfileId = Number(invoice.raw.billing_profile_id);
-  if (currentProfileId === input.billing_profile_id) {
-    res.json(await invoiceDetail(id));
-    return;
-  }
+  const profileChanged = currentProfileId !== input.billing_profile_id;
+  const gstEnabled = billingProfileGstEnabled(profile.raw);
+  const gstPercent = billingProfileGstPercent(profile.raw, invoice.raw);
+  const now = nowIst();
+
   const updated = await updateLegacyRecord('invoices', id, {
     billing_profile_id: input.billing_profile_id,
-    billing_profile_previous_id: Number.isSafeInteger(currentProfileId) && currentProfileId > 0 ? currentProfileId : null,
-    billing_profile_changed_by: req.auth!.legacyId,
-    billing_profile_changed_at: nowIst(),
+    gst_enabled: gstEnabled ? 1 : 0,
+    gst_percent: gstPercent,
+    ...(profileChanged ? {
+      billing_profile_previous_id: Number.isSafeInteger(currentProfileId) && currentProfileId > 0 ? currentProfileId : null,
+      billing_profile_changed_by: req.auth!.legacyId,
+      billing_profile_changed_at: now
+    } : {}),
     updated_by: req.auth!.legacyId,
-    updated_at: nowIst()
+    updated_at: now
   });
   if (!updated) throw new HttpError(404, 'Invoice not found.');
+
+  // Recalculate after the GST mode is persisted so subtotal, GST, total,
+  // balance and automatic payment status all reflect the new issuer profile.
+  await recalculateInvoice(id);
   res.json(await invoiceDetail(id));
 }));
 
@@ -679,6 +689,27 @@ async function nextInvoiceNo(issueDate: string): Promise<string> {
   const yearMonth = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}`;
   const existing = await listRawRecords('invoices', { 'raw.invoice_no': new RegExp(`^INV-${yearMonth}-`, 'i') }, 10_000);
   return `INV-${yearMonth}-${String(existing.length + 1).padStart(3, '0')}`;
+}
+
+function billingProfileGstEnabled(raw: Record<string, unknown>): boolean {
+  for (const value of [raw.gst_enabled, raw.gst_default_enabled, raw.gst_registered, raw.gst_applicable]) {
+    if (value === null || value === undefined || value === '') continue;
+    const normalized = String(value).trim().toLowerCase();
+    if (value === true || value === 1 || normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'enabled') return true;
+    if (value === false || value === 0 || normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'disabled') return false;
+  }
+  // A billing profile without an explicit GST flag is treated as non-GST,
+  // matching the Billing Profiles form and invoice creation UI.
+  return false;
+}
+
+function billingProfileGstPercent(profileRaw: Record<string, unknown>, invoiceRaw: Record<string, unknown>): number {
+  for (const value of [profileRaw.gst_percent, profileRaw.gst_rate, invoiceRaw.gst_percent, invoiceRaw.gst_rate]) {
+    if (value === null || value === undefined || value === '') continue;
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) return Math.min(100, parsed);
+  }
+  return 18;
 }
 
 function billingProfileId(value: string | string[] | undefined): number {
