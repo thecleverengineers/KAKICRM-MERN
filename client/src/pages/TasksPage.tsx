@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArchiveRestore, Check, ChevronDown, Plus, Search, Trash2, X } from 'lucide-react';
+import { ArchiveRestore, CalendarDays, Check, ChevronDown, Plus, Search, Trash2, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { TaskFriendlyList } from '../components/TaskFriendlyList.js';
 import { ErrorState, LoadingState } from '../components/LoadingState.js';
@@ -23,6 +23,16 @@ const taskResource: ResourceConfig = {
 type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
 
 type TaskStatusFilter = 'all' | TaskStatus;
+type TaskDateFilter = 'all' | 'overdue' | 'today' | 'next7' | 'next30' | 'custom';
+
+const taskDateOptions: Array<{ id: TaskDateFilter; label: string }> = [
+  { id: 'all', label: 'All dates' },
+  { id: 'overdue', label: 'Overdue' },
+  { id: 'today', label: 'Due today' },
+  { id: 'next7', label: 'Next 7 days' },
+  { id: 'next30', label: 'Next 30 days' },
+  { id: 'custom', label: 'Custom range' }
+];
 
 const taskPriorityOptions: Array<{ id: 'all' | TaskPriority; label: string }> = [
   { id: 'all', label: 'All priorities' },
@@ -40,6 +50,35 @@ const taskStatusTabs: Array<{ id: TaskStatusFilter; label: string }> = [
   { id: 'completed', label: 'Completed' },
   { id: 'blocked', label: 'Blocked' }
 ];
+
+function isoLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function shiftLocalDate(days: number): string {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + days);
+  return isoLocalDate(date);
+}
+
+function taskDueDateRange(filter: TaskDateFilter, customFrom: string, customTo: string): { dueFrom?: string; dueTo?: string } {
+  if (filter === 'overdue') return { dueTo: shiftLocalDate(-1) };
+  if (filter === 'today') {
+    const today = shiftLocalDate(0);
+    return { dueFrom: today, dueTo: today };
+  }
+  if (filter === 'next7') return { dueFrom: shiftLocalDate(0), dueTo: shiftLocalDate(6) };
+  if (filter === 'next30') return { dueFrom: shiftLocalDate(0), dueTo: shiftLocalDate(29) };
+  if (filter === 'custom') return {
+    ...(customFrom ? { dueFrom: customFrom } : {}),
+    ...(customTo ? { dueTo: customTo } : {})
+  };
+  return {};
+}
 
 // Keep the task filter presentation local to this page. This also makes the
 // status navigation resilient when an older cached global stylesheet is still
@@ -81,6 +120,17 @@ button.task-status-tab.is-active { border-color: #315c9e; background: linear-gra
 .task-priority-option[data-priority="normal"] .task-priority-option__dot { background: #3b82f6; box-shadow: 0 0 0 4px rgba(59,130,246,.10); }
 .task-priority-option[data-priority="low"] .task-priority-option__dot { background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,.10); }
 .task-priority-option__check { color: #3d67a2; justify-self: end; }
+.task-date-filter { min-width: 178px; display: flex; align-items: center; gap: 8px; }
+.task-date-filter__wrap { position: relative; min-width: 0; }
+.task-date-filter__control { width: 100%; height: 42px; min-width: 178px; padding: 0 34px 0 36px; border: 1px solid #d8e1ec; border-radius: 12px; outline: 0; appearance: none; background: linear-gradient(180deg,#ffffff 0%,#f8fafd 100%); color: #26364f; font: inherit; font-size: .75rem; font-weight: 750; cursor: pointer; box-shadow: 0 5px 14px rgba(33,52,82,.06); transition: border-color .16s ease, box-shadow .16s ease; }
+.task-date-filter__wrap > svg:first-child { position: absolute; z-index: 1; left: 12px; top: 50%; transform: translateY(-50%); color: #70829b; pointer-events: none; }
+.task-date-filter__wrap > svg:last-child { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); color: #7f8ea3; pointer-events: none; }
+.task-date-filter__control:hover { border-color: #b8c7da; }
+.task-date-filter__control:focus { border-color: #7f9ed1; box-shadow: 0 0 0 3px rgba(75,118,183,.12), 0 8px 20px rgba(33,52,82,.08); }
+.task-custom-date-range { width: 100%; margin: -5px 0 14px; padding: 12px; display: flex; align-items: end; flex-wrap: wrap; gap: 10px; border: 1px solid #e0e7f0; border-radius: 12px; background: #fbfcfe; }
+.task-custom-date-range .field { flex: 1 1 170px; }
+.task-custom-date-range .field input { background: #fff; }
+.task-custom-date-range__copy { flex: 0 0 auto; padding-bottom: 10px; color: #8190a3; font-size: .68rem; }
 
 @media (max-width: 760px) {
   .task-status-tabs { display: flex; grid-template-columns: none; gap: 6px; padding: 6px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
@@ -120,6 +170,8 @@ button.task-status-tab.is-active { border-color: #315c9e; background: linear-gra
   .task-search-form { min-width: 0; }
   .task-priority-filter { flex: 1 1 auto; min-width: 0; }
   .task-priority-select { min-width: 150px; max-width: 100%; }
+  .task-date-filter { flex: 1 1 auto; min-width: 0; }
+  .task-date-filter__wrap, .task-date-filter__control { width: 100%; min-width: 150px; }
   .task-toolbar-actions { width: 100%; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
   .task-toolbar-actions > * { flex: 0 0 auto; }
   .task-toolbar-actions::-webkit-scrollbar { height: 5px; }
@@ -147,16 +199,21 @@ export function TasksPage() {
   const [activeStatus, setActiveStatus] = useState<TaskStatusFilter>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | TaskPriority>('all');
   const [priorityMenuOpen, setPriorityMenuOpen] = useState(false);
+  const [dateFilter, setDateFilter] = useState<TaskDateFilter>('all');
+  const [customDateFrom, setCustomDateFrom] = useState('');
+  const [customDateTo, setCustomDateTo] = useState('');
   const [statusUpdatingId, setStatusUpdatingId] = useState<number | null>(null);
+  const dueDateRange = useMemo(() => taskDueDateRange(dateFilter, customDateFrom, customDateTo), [dateFilter, customDateFrom, customDateTo]);
   const statusCountsQuery = useQuery({
-    queryKey: ['task-status-counts'],
+    queryKey: ['task-status-counts', dueDateRange.dueFrom ?? '', dueDateRange.dueTo ?? ''],
     staleTime: 30_000,
     queryFn: async () => {
       const counts = await Promise.all(taskStatusTabs.map(async (tab) => {
         const result = await api<Paginated<PublicRecord>>(`/tasks${queryString({
           page: 1,
           limit: 1,
-          ...(tab.id !== 'all' ? { status: tab.id } : {})
+          ...(tab.id !== 'all' ? { status: tab.id } : {}),
+          ...dueDateRange
         })}`);
         return [tab.id, result.pagination.total] as const;
       }));
@@ -187,19 +244,20 @@ export function TasksPage() {
   useEffect(() => {
     setSelectedTaskIds([]);
     setRecycleError(null);
-  }, [page, search, activeStatus, priorityFilter]);
+  }, [page, search, activeStatus, priorityFilter, dateFilter, customDateFrom, customDateTo]);
   const query = useQuery({
-    queryKey: ['tasks', page, search, activeStatus, priorityFilter],
+    queryKey: ['tasks', page, search, activeStatus, priorityFilter, dueDateRange.dueFrom ?? '', dueDateRange.dueTo ?? ''],
     queryFn: () => api<Paginated<PublicRecord>>(`/tasks${queryString({
       page,
       limit: 50,
       search,
       ...(activeStatus !== 'all' ? { status: activeStatus } : {}),
-      ...(priorityFilter !== 'all' ? { priority: priorityFilter } : {})
+      ...(priorityFilter !== 'all' ? { priority: priorityFilter } : {}),
+      ...dueDateRange
     })}`)
   });
   const suggestionsQuery = useQuery({
-    queryKey: ['task-suggestions', suggestionTerm, activeStatus, priorityFilter],
+    queryKey: ['task-suggestions', suggestionTerm, activeStatus, priorityFilter, dueDateRange.dueFrom ?? '', dueDateRange.dueTo ?? ''],
     enabled: searchOpen && suggestionTerm.length >= 1,
     staleTime: 30_000,
     queryFn: () => api<Paginated<PublicRecord>>(`/tasks${queryString({
@@ -207,7 +265,8 @@ export function TasksPage() {
       limit: 6,
       search: suggestionTerm,
       ...(activeStatus !== 'all' ? { status: activeStatus } : {}),
-      ...(priorityFilter !== 'all' ? { priority: priorityFilter } : {})
+      ...(priorityFilter !== 'all' ? { priority: priorityFilter } : {}),
+      ...dueDateRange
     })}`)
   });
   const applySearch = (value = searchInput) => {
@@ -303,12 +362,19 @@ export function TasksPage() {
         </div>}
       </div>
       <div className="task-priority-filter" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPriorityMenuOpen(false); }}><span className="task-priority-filter__label">Priority</span><span className={priorityMenuOpen ? 'task-priority-select is-open' : 'task-priority-select'} data-priority={priorityFilter}><button className="task-priority-trigger" type="button" aria-haspopup="listbox" aria-expanded={priorityMenuOpen} onClick={() => setPriorityMenuOpen((open) => !open)}><span className="task-priority-select__dot" aria-hidden="true" /><span className="task-priority-trigger__text">{taskPriorityOptions.find((option) => option.id === priorityFilter)?.label ?? 'All priorities'}</span><ChevronDown className="task-priority-select__chevron" size={16} aria-hidden="true" /></button>{priorityMenuOpen && <div className="task-priority-menu" role="listbox" aria-label="Filter tasks by priority">{taskPriorityOptions.map((option) => <button className={priorityFilter === option.id ? 'task-priority-option is-selected' : 'task-priority-option'} data-priority={option.id} type="button" role="option" aria-selected={priorityFilter === option.id} key={option.id} onClick={() => { setPriorityFilter(option.id); setPage(1); setPriorityMenuOpen(false); }}><span className="task-priority-option__dot" aria-hidden="true" /><span>{option.label}</span>{priorityFilter === option.id ? <Check className="task-priority-option__check" size={15} aria-hidden="true" /> : <span />}</button>)}</div>}</span></div>
+      <div className="task-date-filter"><div className="task-date-filter__wrap"><CalendarDays size={16} aria-hidden="true" /><select className="task-date-filter__control" value={dateFilter} aria-label="Filter tasks by due date" onChange={(event) => { setDateFilter(event.target.value as TaskDateFilter); setPage(1); }}>{taskDateOptions.map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select><ChevronDown size={15} aria-hidden="true" /></div></div>
       <div className="task-toolbar-actions">{canManage && selectedTaskIds.length > 0 && <><span className="task-selection-count">{selectedTaskIds.length} selected</span><button className="button button--danger button--compact" type="button" onClick={() => { setRecycleError(null); setRecycleConfirmOpen(true); }}><Trash2 size={16} /> Move to recycle</button><button className="text-button" type="button" onClick={() => setSelectedTaskIds([])}>Clear</button></>}{query.data.pagination.total} {isEmployee ? 'in your work circle' : 'visible to you'}</div>
     </div>
-    {(search || priorityFilter !== 'all') && <div className="task-active-filters" aria-label="Active task filters">
+    {dateFilter === 'custom' && <div className="task-custom-date-range" aria-label="Custom due date range">
+      <label className="field"><span>Due from</span><input type="date" value={customDateFrom} max={customDateTo || undefined} onChange={(event) => { setCustomDateFrom(event.target.value); setPage(1); }} /></label>
+      <label className="field"><span>Due to</span><input type="date" value={customDateTo} min={customDateFrom || undefined} onChange={(event) => { setCustomDateTo(event.target.value); setPage(1); }} /></label>
+      <span className="task-custom-date-range__copy">Leave either side empty for an open-ended range.</span>
+    </div>}
+    {(search || priorityFilter !== 'all' || dateFilter !== 'all') && <div className="task-active-filters" aria-label="Active task filters">
       {search && <span className="task-active-filter">Search: {search}<button type="button" aria-label="Clear search" onClick={() => { setSearch(''); setSearchInput(''); setPage(1); }}>×</button></span>}
       {priorityFilter !== 'all' && <span className="task-active-filter">Priority: {taskPriorityOptions.find((option) => option.id === priorityFilter)?.label}<button type="button" aria-label="Clear priority filter" onClick={() => { setPriorityFilter('all'); setPage(1); }}>×</button></span>}
-      <button className="task-clear-filters" type="button" onClick={() => { setSearch(''); setSearchInput(''); setPriorityFilter('all'); setPage(1); }}>Clear filters</button>
+      {dateFilter !== 'all' && <span className="task-active-filter">Due date: {dateFilter === 'custom' ? [customDateFrom || 'Any', customDateTo || 'Any'].join(' → ') : taskDateOptions.find((option) => option.id === dateFilter)?.label}<button type="button" aria-label="Clear due date filter" onClick={() => { setDateFilter('all'); setCustomDateFrom(''); setCustomDateTo(''); setPage(1); }}>×</button></span>}
+      <button className="task-clear-filters" type="button" onClick={() => { setSearch(''); setSearchInput(''); setPriorityFilter('all'); setDateFilter('all'); setCustomDateFrom(''); setCustomDateTo(''); setPage(1); }}>Clear filters</button>
     </div>}
     {notice && <p className="task-action-notice" role="status">{notice}</p>}
     <TaskFriendlyList
