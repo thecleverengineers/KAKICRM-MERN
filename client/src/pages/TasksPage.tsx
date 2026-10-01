@@ -85,17 +85,17 @@ function taskDueDateRange(filter: TaskDateFilter, customFrom: string, customTo: 
 // present while the rest of the application assets are being refreshed.
 const taskStatusTabsStyle = `
 .task-status-tabs { width: 100%; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; padding: 7px 0; margin: 0 0 18px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-button.task-status-tab { min-width: 0; min-height: 46px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid transparent; border-radius: 11px; appearance: none; background: transparent; color: #718097; font: inherit; font-size: .76rem; font-weight: 800; letter-spacing: .01em; white-space: nowrap; cursor: pointer; transition: background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .16s ease; }
-button.task-status-tab:hover { border-color: #c7d3e2; background: #f8fbff; color: #23334d; transform: translateY(-1px); }
+button.task-status-tab { min-width: 0; min-height: 46px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 0; appearance: none; background: transparent; color: #718097; font: inherit; font-size: .76rem; font-weight: 800; letter-spacing: .01em; white-space: nowrap; cursor: pointer; transition: color .16s ease, transform .16s ease; }
+button.task-status-tab:hover { background: transparent; color: #23334d; transform: translateY(-1px); }
 button.task-status-tab:focus-visible { outline: 3px solid #b9d2ff; outline-offset: 1px; }
-button.task-status-tab.is-active { border-color: #315c9e; background: linear-gradient(135deg, #315c9e, #244576); color: #ffffff; box-shadow: 0 7px 16px rgba(49, 92, 158, .25); transform: translateY(-1px); }
+button.task-status-tab.is-active { border: 0; background: transparent; color: #315c9e; box-shadow: none; transform: translateY(-1px); }
 .task-status-tab__dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: #9aa8bb; box-shadow: 0 0 0 3px rgba(154, 168, 187, .14); }
 .task-status-tab[data-status="pending"] .task-status-tab__dot { background: #d99b2b; box-shadow: 0 0 0 3px rgba(217, 155, 43, .14); }
 .task-status-tab[data-status="in_progress"] .task-status-tab__dot { background: #4f7dd4; box-shadow: 0 0 0 3px rgba(79, 125, 212, .14); }
 .task-status-tab[data-status="review"] .task-status-tab__dot { background: #8a66c7; box-shadow: 0 0 0 3px rgba(138, 102, 199, .14); }
 .task-status-tab[data-status="completed"] .task-status-tab__dot { background: #39a66b; box-shadow: 0 0 0 3px rgba(57, 166, 107, .14); }
 .task-status-tab[data-status="blocked"] .task-status-tab__dot { background: #d15d68; box-shadow: 0 0 0 3px rgba(209, 93, 104, .14); }
-.task-status-tab.is-active .task-status-tab__dot { background: currentColor; box-shadow: 0 0 0 3px rgba(255, 255, 255, .2); }
+.task-status-tab.is-active .task-status-tab__dot { background: currentColor; box-shadow: 0 0 0 3px rgba(49, 92, 158, .12); }
 .task-priority-filter { position: relative; z-index: 35; display: flex; align-items: center; gap: 9px; min-width: 0; overflow: visible; }
 .task-priority-filter__label { color: #6f7d91; font-size: .69rem; font-weight: 800; letter-spacing: .055em; text-transform: uppercase; white-space: nowrap; }
 .task-priority-select { position: relative; min-width: 168px; height: 42px; display: flex; align-items: center; gap: 9px; padding: 0 38px 0 12px; overflow: visible; border: 1px solid #d8e1ec; border-radius: 12px; background: linear-gradient(180deg,#ffffff 0%,#f8fafd 100%); box-shadow: 0 5px 14px rgba(33,52,82,.06), inset 0 1px 0 rgba(255,255,255,.9); transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; z-index: 30; }
