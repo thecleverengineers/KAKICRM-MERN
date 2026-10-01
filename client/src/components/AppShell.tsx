@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Bell, CalendarClock, CheckSquare, ChevronDown, KeyRound, LayoutDashboard, LogOut, Menu, MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, Sun, UserRound, X } from 'lucide-react';
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { navigation } from '../config/resources.js';
@@ -10,11 +11,24 @@ import { GlobalSearch } from './GlobalSearch.js';
 import { brandingLogoForTheme, useBranding } from '../lib/branding.js';
 import { initials } from '../lib/format.js';
 import { assetUrl } from '../lib/assets.js';
+import { api, type Paginated, type PublicRecord } from '../lib/api.js';
 import { applyTheme, readTheme, type AppTheme } from '../lib/theme.js';
 import { useAuth } from '../store/auth.js';
 
+type BootstrapPayload = {
+  generatedAt: string;
+  durationMs: number;
+  data: {
+    dashboard: unknown;
+    tasks: Paginated<PublicRecord>;
+    notifications: Paginated<PublicRecord> & { unread: number };
+    attendance: unknown;
+  };
+};
+
 export function AppShell() {
   const { user, logout, hasPermission } = useAuth();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [sidebarHidden, setSidebarHidden] = useState(() => localStorage.getItem('kaki-crm-sidebar-hidden') === '1');
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -36,6 +50,32 @@ export function AppShell() {
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (!user?.legacyId) return;
+    const bootstrapKey = ['crm-bootstrap', user.legacyId] as const;
+    if (queryClient.getQueryData(bootstrapKey)) return;
+
+    let cancelled = false;
+    void api<BootstrapPayload>('/bootstrap')
+      .then((payload) => {
+        if (cancelled) return;
+        queryClient.setQueryData(bootstrapKey, payload);
+        queryClient.setQueryData(['dashboard-summary'], payload.data.dashboard);
+        queryClient.setQueryData(['tasks', 1, '', 'all', 'all', '', ''], payload.data.tasks);
+        queryClient.setQueryData(['notifications'], payload.data.notifications);
+        queryClient.setQueryData(['attendance-me'], payload.data.attendance);
+      })
+      .catch(() => {
+        // Bootstrap is an acceleration layer only. Individual pages retain
+        // their existing permission-aware queries as the source of truth.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [queryClient, user?.legacyId]);
+
 
   useEffect(() => {
     setOpen(false);
