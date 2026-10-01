@@ -14,9 +14,13 @@ type TaskFriendlyListProps = {
   selectedLegacyIds?: number[];
   onSelectedLegacyIdsChange?: (ids: number[]) => void;
   onStatusChange: (taskId: number, status: TaskStatus) => Promise<void>;
+  onPriorityChange: (taskId: number, priority: TaskPriority) => Promise<void>;
   statusUpdatingId?: number | null;
+  priorityUpdatingId?: number | null;
   emptyTitle?: string;
 };
+
+type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
 
 const statusOptions: Array<{ value: TaskStatus; label: string }> = [
   { value: 'in_progress', label: 'In progress' },
@@ -24,6 +28,13 @@ const statusOptions: Array<{ value: TaskStatus; label: string }> = [
   { value: 'pending', label: 'Pending' },
   { value: 'completed', label: 'Completed' },
   { value: 'blocked', label: 'Blocked' }
+];
+
+const priorityOptions: Array<{ value: TaskPriority; label: string }> = [
+  { value: 'urgent', label: 'Urgent' },
+  { value: 'high', label: 'High' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'low', label: 'Low' }
 ];
 
 export function TaskFriendlyList({
@@ -37,7 +48,9 @@ export function TaskFriendlyList({
   selectedLegacyIds = [],
   onSelectedLegacyIdsChange,
   onStatusChange,
+  onPriorityChange,
   statusUpdatingId = null,
+  priorityUpdatingId = null,
   emptyTitle = 'No tasks found'
 }: TaskFriendlyListProps) {
   const visibleIds = records.map((record) => record.legacyId).filter((id): id is number => typeof id === 'number');
@@ -92,7 +105,8 @@ export function TaskFriendlyList({
         const project = record.relationLabels?.project_id || 'No project';
         const due = dueMeta(record.fields.due_date);
         const selected = typeof taskId === 'number' && selectedLegacyIds.includes(taskId);
-        const updating = typeof taskId === 'number' && statusUpdatingId === taskId;
+        const statusUpdating = typeof taskId === 'number' && statusUpdatingId === taskId;
+        const priorityUpdating = typeof taskId === 'number' && priorityUpdatingId === taskId;
 
         const openFromKeyboard = (event: KeyboardEvent<HTMLElement>) => {
           if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -118,9 +132,34 @@ export function TaskFriendlyList({
           <div className="task-friendly-row__main">
             <div className="task-friendly-row__title-line">
               <h3>{title}</h3>
-              <div className="task-friendly-badges">
-                <span className={'task-friendly-status task-friendly-status--' + status}>{humanizeStatus(status)}</span>
-                <span className={'task-friendly-priority task-friendly-priority--' + priority}>{humanize(priority)}</span>
+              <div className="task-friendly-badges" onClick={(event) => event.stopPropagation()}>
+                {typeof taskId === 'number' ? <>
+                  <label className={'task-friendly-inline-select task-friendly-status task-friendly-status--' + status}>
+                    <span className="sr-only">Change status for {title}</span>
+                    <select
+                      value={status}
+                      disabled={statusUpdating}
+                      onChange={(event) => void onStatusChange(taskId, event.target.value as TaskStatus)}
+                      aria-label={'Change status for ' + title}
+                    >
+                      {statusOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
+                  <label className={'task-friendly-inline-select task-friendly-priority task-friendly-priority--' + priority}>
+                    <span className="sr-only">Change priority for {title}</span>
+                    <select
+                      value={priority}
+                      disabled={priorityUpdating}
+                      onChange={(event) => void onPriorityChange(taskId, event.target.value as TaskPriority)}
+                      aria-label={'Change priority for ' + title}
+                    >
+                      {priorityOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
+                </> : <>
+                  <span className={'task-friendly-status task-friendly-status--' + status}>{humanizeStatus(status)}</span>
+                  <span className={'task-friendly-priority task-friendly-priority--' + priority}>{humanize(priority)}</span>
+                </>}
               </div>
             </div>
 
@@ -138,19 +177,7 @@ export function TaskFriendlyList({
             </div>
           </div>
 
-          {typeof taskId === 'number' && <div className="task-friendly-quick-status" onClick={(event) => event.stopPropagation()}>
-            <label htmlFor={'task-status-' + taskId}>Status</label>
-            <select
-              id={'task-status-' + taskId}
-              value={status}
-              disabled={updating}
-              onChange={(event) => void onStatusChange(taskId, event.target.value as TaskStatus)}
-              aria-label={'Change status for ' + title}
-            >
-              {statusOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-            </select>
-            {updating && <span className="task-friendly-saving">Saving…</span>}
-          </div>}
+
         </article>;
       })}
     </div>
