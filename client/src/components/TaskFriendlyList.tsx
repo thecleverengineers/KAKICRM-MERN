@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Clock3, FolderKanban, UserRound } from 'lucide-react';
-import type { KeyboardEvent, MouseEvent } from 'react';
+import type { KeyboardEvent } from 'react';
 import { type PublicRecord } from '../lib/api.js';
 import { type TaskStatus } from '../lib/projects.js';
 
