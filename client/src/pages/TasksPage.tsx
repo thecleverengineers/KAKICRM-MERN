@@ -203,6 +203,7 @@ export function TasksPage() {
   const [customDateFrom, setCustomDateFrom] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
   const [statusUpdatingId, setStatusUpdatingId] = useState<number | null>(null);
+  const [priorityUpdatingId, setPriorityUpdatingId] = useState<number | null>(null);
   const dueDateRange = useMemo(() => taskDueDateRange(dateFilter, customDateFrom, customDateTo), [dateFilter, customDateFrom, customDateTo]);
   const statusCountsQuery = useQuery({
     queryKey: ['task-status-counts', dueDateRange.dueFrom ?? '', dueDateRange.dueTo ?? ''],
@@ -312,6 +313,21 @@ export function TasksPage() {
     }
   };
 
+  const updateTaskPriority = async (taskId: number, priority: TaskPriority) => {
+    if (priorityUpdatingId === taskId) return;
+    setPriorityUpdatingId(taskId);
+    setNotice(null);
+    try {
+      await api(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify({ priority }) });
+      setNotice(`Task priority changed to ${priority}.`);
+      await invalidateTaskViews();
+    } catch (problem) {
+      setNotice(problem instanceof Error ? problem.message : 'The task priority could not be updated.');
+    } finally {
+      setPriorityUpdatingId(null);
+    }
+  };
+
   const recycleSelected = async () => {
     if (!selectedTaskIds.length || recycling) return;
     setRecycling(true);
@@ -388,7 +404,9 @@ export function TasksPage() {
       selectedLegacyIds={selectedTaskIds}
       onSelectedLegacyIdsChange={setSelectedTaskIds}
       onStatusChange={updateTaskStatus}
+      onPriorityChange={updateTaskPriority}
       statusUpdatingId={statusUpdatingId}
+      priorityUpdatingId={priorityUpdatingId}
       emptyTitle={activeStatus === 'all' ? 'You’re all caught up' : 'No tasks in this status'}
     />
     <RecordFormDialog open={createOpen} resource={taskResource} initialFields={initialTaskFields} onClose={() => setCreateOpen(false)} onSubmit={create} />
