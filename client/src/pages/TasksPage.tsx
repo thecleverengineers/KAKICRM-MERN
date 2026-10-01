@@ -84,7 +84,7 @@ function taskDueDateRange(filter: TaskDateFilter, customFrom: string, customTo: 
 // status navigation resilient when an older cached global stylesheet is still
 // present while the rest of the application assets are being refreshed.
 const taskStatusTabsStyle = `
-.task-status-tabs { width: 100%; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; padding: 7px; margin: 0 0 18px; border: 1px solid #dbe3ed; border-radius: 16px; background: linear-gradient(135deg, #f4f7fb, #ffffff); box-shadow: 0 8px 22px rgba(28, 46, 75, .06); }
+.task-status-tabs { width: 100%; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; padding: 7px 0; margin: 0 0 18px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 button.task-status-tab { min-width: 0; min-height: 46px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid transparent; border-radius: 11px; appearance: none; background: transparent; color: #718097; font: inherit; font-size: .76rem; font-weight: 800; letter-spacing: .01em; white-space: nowrap; cursor: pointer; transition: background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .16s ease; }
 button.task-status-tab:hover { border-color: #c7d3e2; background: #f8fbff; color: #23334d; transform: translateY(-1px); }
 button.task-status-tab:focus-visible { outline: 3px solid #b9d2ff; outline-offset: 1px; }
