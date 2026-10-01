@@ -85,7 +85,9 @@ export function InvoiceDetailPage() {
   const email = firstText(billingFields.email, billingFields.billing_email);
   const profileGstEnabled = optionalBoolean(billingFields.gst_enabled, billingFields.gst_default_enabled, billingFields.gst_registered, billingFields.gst_applicable);
   const invoiceGstEnabled = optionalBoolean(invoice.data.fields.gst_enabled);
-  const showIssuerGstin = Boolean(issuerGstin) && (profileGstEnabled ?? invoiceGstEnabled ?? false);
+  const effectiveGstEnabled = profileGstEnabled ?? invoiceGstEnabled ?? false;
+  const invoiceGstPercent = numberValue(invoice.data.fields.gst_percent ?? invoice.data.fields.gst_rate);
+  const showIssuerGstin = Boolean(issuerGstin) && effectiveGstEnabled;
   const discount = invoiceDiscount(invoice.data.fields);
   const hasDiscount = discount.type !== 'none' && discount.amount > 0;
   const refresh = async () => {
@@ -173,7 +175,7 @@ export function InvoiceDetailPage() {
         </table>
         <section className="invoice-template-settlement">
           <div className="invoice-template-payment"><h3>Payment info:</h3><p><strong>Account #:</strong> {accountNumber || 'Available on request'}</p><p><strong>A/C Name:</strong> {issuer}</p>{bankName && <p><strong>Bank details:</strong> {bankName}</p>}{bankIfsc && <p><strong>IFSC:</strong> {bankIfsc}</p>}{showIssuerGstin && <p><strong>GSTIN:</strong> {issuerGstin}</p>}{hasInvoiceNote && <div className="invoice-template-note-block"><strong>Invoice note</strong><p>{invoiceNote}</p></div>}{(profileQrPrimary || showProfileQrSecondary) && <div className="invoice-template-qr-codes" aria-label="Payment QR codes">{profileQrPrimary && <div className="invoice-template-qr-code"><img src={profileQrPrimary} alt="QR Code Primary" /><span>QR Code Primary</span></div>}{showProfileQrSecondary && <div className="invoice-template-qr-code"><img src={profileQrSecondary ?? ''} alt="QR Code Secondary" /><span>QR Code Secondary</span></div>}</div>}</div>
-          <div className="invoice-template-totals"><div><span>Sub total</span><strong>{money(invoice.data.fields.subtotal)}</strong></div>{hasDiscount && <div className="invoice-template-discount"><span>Discount</span><strong>−{money(discount.amount)}</strong></div>}<div><span>Tax</span><strong>{money(invoice.data.fields.gst_amount)}</strong></div><div className="invoice-template-total"><span>Total</span><strong>{money(invoice.data.fields.total_amount)}</strong></div><p><span>Paid {money(invoice.data.fields.paid_amount)}</span><strong>Balance {money(invoice.data.fields.balance_amount)}</strong></p></div>
+          <div className="invoice-template-totals"><div><span>Sub total</span><strong>{money(invoice.data.fields.subtotal)}</strong></div>{hasDiscount && <div className="invoice-template-discount"><span>Discount</span><strong>−{money(discount.amount)}</strong></div>}{effectiveGstEnabled && <div><span>{invoiceGstPercent > 0 ? `GST (${formatDiscountValue(invoiceGstPercent)}%)` : 'GST'}</span><strong>{money(invoice.data.fields.gst_amount)}</strong></div>}<div className="invoice-template-total"><span>Total</span><strong>{money(invoice.data.fields.total_amount)}</strong></div><p><span>Paid {money(invoice.data.fields.paid_amount)}</span><strong>Balance {money(invoice.data.fields.balance_amount)}</strong></p></div>
         </section>
         <section className={`invoice-template-signature${profileSignature ? ' invoice-template-signature--signed' : ''}`}><div><strong>Authority</strong>{profileSignature ? <img className="invoice-template-signature-image" src={profileSignature} alt={`${issuer} authority signature`} /> : <div className="invoice-signature-line" />}</div></section>
       </div>
@@ -211,14 +213,13 @@ function InvoiceBillingProfileSwitcher({ invoiceId, invoice, currentProfile, onS
   }, [currentId]);
 
   const selectedProfile = profilesQuery.data?.data.find((profile) => String(profile.legacyId) === selectedId);
+  const selectedProfileGstEnabled = selectedProfile
+    ? optionalBoolean(selectedProfile.fields.gst_enabled, selectedProfile.fields.gst_default_enabled, selectedProfile.fields.gst_registered, selectedProfile.fields.gst_applicable) ?? false
+    : null;
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!selectedId) {
       setError('Select a billing profile.');
-      return;
-    }
-    if (selectedId === currentId) {
-      setMessage('This invoice is already using the selected billing profile.');
       return;
     }
     setSaving(true);
@@ -227,7 +228,7 @@ function InvoiceBillingProfileSwitcher({ invoiceId, invoice, currentProfile, onS
     try {
       await api(`/billing/invoices/${invoiceId}/billing-profile`, { method: 'PATCH', body: JSON.stringify({ billing_profile_id: Number(selectedId) }) });
       await onSaved();
-      setMessage('Billing profile changed for this invoice. Existing billing profiles and invoice amounts were not modified.');
+      setMessage('Billing profile applied. GST and invoice totals were recalculated from the selected profile.');
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : 'Could not change the invoice billing profile.');
     } finally {
@@ -235,7 +236,7 @@ function InvoiceBillingProfileSwitcher({ invoiceId, invoice, currentProfile, onS
     }
   };
 
-  return <article className="content-card invoice-billing-profile-card"><div className="card-heading"><div><p className="eyebrow">INVOICE ISSUER</p><h2>Change billing profile</h2></div><FileText size={18} /></div><p className="muted-copy">Change only the company profile used by this invoice. The existing billing profile configuration, logo, signature, QR settings, GST and bank details remain unchanged.</p>{profilesQuery.isPending ? <p className="muted-copy">Loading billing profiles…</p> : profilesQuery.isError ? <p className="form-error">Could not load billing profiles. Please retry the invoice page.</p> : <form className="invoice-profile-switcher" onSubmit={(event) => void submit(event)}><label className="field"><span>Billing profile</span><select value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setMessage(null); setError(null); }}><option value="">Select billing profile…</option>{profilesQuery.data.data.map((profile) => <option key={profile.id} value={profile.legacyId ?? ''}>{companyProfileName(profile)}</option>)}</select></label><div className="invoice-profile-switcher__details"><strong>{selectedProfile ? companyProfileName(selectedProfile) : 'No profile selected'}</strong><span>{selectedProfile ? 'This profile will be used for the invoice preview and printed/PDF output.' : 'Select an active profile to update this invoice.'}</span></div><button className="button" type="submit" disabled={saving || !selectedId}>{saving ? 'Changing…' : 'Change profile'}</button>{message && <p className="form-success">{message}</p>}{error && <p className="form-error">{error}</p>}</form>}</article>;
+  return <article className="content-card invoice-billing-profile-card"><div className="card-heading"><div><p className="eyebrow">INVOICE ISSUER</p><h2>Change billing profile</h2></div><FileText size={18} /></div><p className="muted-copy">Change the company profile used by this invoice. The profile itself is not modified; the invoice automatically follows the selected profile’s GST enabled/disabled setting and recalculates its totals.</p>{profilesQuery.isPending ? <p className="muted-copy">Loading billing profiles…</p> : profilesQuery.isError ? <p className="form-error">Could not load billing profiles. Please retry the invoice page.</p> : <form className="invoice-profile-switcher" onSubmit={(event) => void submit(event)}><label className="field"><span>Billing profile</span><select value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setMessage(null); setError(null); }}><option value="">Select billing profile…</option>{profilesQuery.data.data.map((profile) => <option key={profile.id} value={profile.legacyId ?? ''}>{companyProfileName(profile)}</option>)}</select></label><div className="invoice-profile-switcher__details"><strong>{selectedProfile ? companyProfileName(selectedProfile) : 'No profile selected'}</strong><span>{selectedProfile ? `${selectedProfileGstEnabled ? 'GST enabled' : 'GST disabled'} · This profile will control GST in the invoice preview and printed output.` : 'Select an active profile to update this invoice.'}</span></div><button className="button" type="submit" disabled={saving || !selectedId}>{saving ? 'Changing…' : 'Change profile'}</button>{message && <p className="form-success">{message}</p>}{error && <p className="form-error">{error}</p>}</form>}</article>;
 }
 
 function InvoiceNoteDialog({ invoiceId, note, onClose, onSaved }: { invoiceId: string; note: string; onClose: () => void; onSaved: () => Promise<void> }) {
