@@ -1,7 +1,16 @@
 import type { ReactNode } from 'react';
 
 export function LoadingState({ label = 'Loading data…' }: { label?: string }) {
-  return <div className="loading-state"><div className="loader" /><span>{label}</span></div>;
+  return <div className="loading-state loading-state--instant" aria-busy="true" aria-label={label}>
+    <span className="sr-only">{label}</span>
+    <div className="instant-page-shell" aria-hidden="true">
+      <span className="instant-page-shell__heading" />
+      <span className="instant-page-shell__line instant-page-shell__line--wide" />
+      <div className="instant-page-shell__grid"><span /><span /><span /></div>
+      <span className="instant-page-shell__line" />
+      <span className="instant-page-shell__line instant-page-shell__line--medium" />
+    </div>
+  </div>;
 }
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {

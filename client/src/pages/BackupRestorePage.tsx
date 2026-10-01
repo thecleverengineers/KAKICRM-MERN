@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams , Link } from 'react-router-dom';
 import { ArchiveRestore, CheckCircle2, Cloud, DatabaseBackup, Download, ExternalLink, FolderPlus, HardDrive, Link2, LockKeyhole, RefreshCw, ShieldCheck, Unplug, Upload } from 'lucide-react';
 import { ErrorState, LoadingState } from '../components/LoadingState.js';
 import { PageHeader } from '../components/PageHeader.js';
@@ -129,7 +129,7 @@ export function BackupRestorePage() {
 function DriveSetup({ drive, busy, folderName, folderReference, onFolderName, onFolderReference, onConnectGoogle, onCreateFolder, onConnectFolder, onTest, onDisconnect }: { drive: BackupGoogleDrive; busy: string | null; folderName: string; folderReference: string; onFolderName: (value: string) => void; onFolderReference: (value: string) => void; onConnectGoogle: () => void; onCreateFolder: () => void; onConnectFolder: () => void; onTest: () => void; onDisconnect: () => void }) {
   return <section className="content-card backup-drive-card">
     <div className="backup-drive-card__heading"><div><p className="eyebrow">CEO/ADMIN GOOGLE DRIVE</p><h2>{drive.connected ? 'Cloud backup destination ready' : 'Connect a dedicated backup folder'}</h2><p>The selected account grants only app-created/app-authorized file access. Refresh tokens are encrypted, allowing unattended daily backups.</p></div><span className={drive.connected ? 'backup-drive-state backup-drive-state--ready' : 'backup-drive-state'}>{drive.connected ? <><CheckCircle2 size={16} /> Connected</> : <><Cloud size={16} /> Action required</>}</span></div>
-    {!drive.oauthConfigured ? <div className="backup-drive-callout">Configure the Google OAuth web client in <a href="/ceo/settings">CEO Settings</a>, enable the Google Drive API, and return here.</div>
+    {!drive.oauthConfigured ? <div className="backup-drive-callout">Configure the Google OAuth web client in <Link to="/ceo/settings">CEO Settings</Link>, enable the Google Drive API, and return here.</div>
       : !drive.googleConnected || !drive.hasDriveScope ? <div className="backup-drive-actions"><div><strong>1. Authorize the CEO/Admin Google account</strong><p>Google asks for identity and limited Drive-file permission. The background job never receives the account password.</p></div><button className="button" disabled={Boolean(busy)} onClick={onConnectGoogle}><Link2 size={16} /> {busy === 'google-connect' ? 'Opening Google…' : 'Connect Google Drive'}</button></div>
         : !drive.connected ? <div className="backup-drive-choices">
           <div><strong>2. Create the recommended dedicated folder</strong><p>The CRM creates it in the connected user’s My Drive and immediately binds scheduled backups to it.</p><div className="backup-drive-input"><input value={folderName} maxLength={120} onChange={(event) => onFolderName(event.target.value)} placeholder="KAKI CRM Backups" /><button className="button" disabled={Boolean(busy)} onClick={onCreateFolder}><FolderPlus size={16} /> Create & connect</button></div></div>
