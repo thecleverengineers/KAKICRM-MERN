@@ -14,6 +14,7 @@ import { configureRealtime } from './realtime.js';
 import { authRouter } from './routes/auth.js';
 import { attendanceRouter } from './routes/attendance.js';
 import { backupsRouter } from './routes/backups.js';
+import { bootstrapRouter } from './routes/bootstrap.js';
 import { billingRouter } from './routes/billing.js';
 import { calendarRouter } from './routes/calendar.js';
 import { credentialVaultRouter } from './routes/credentialVault.js';
@@ -67,6 +68,7 @@ app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'kaki-crm-api', time: new Date().toISOString() }));
 app.use('/api/auth', rateLimit({ windowMs: 15 * 60_000, limit: 25, standardHeaders: 'draft-8', legacyHeaders: false }), authRouter);
+app.use('/api/bootstrap', bootstrapRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/search', searchRouter);

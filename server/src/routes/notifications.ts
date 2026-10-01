@@ -25,16 +25,20 @@ notificationsRouter.delete('/push/subscription', asyncHandler(async (req, res) =
 }));
 
 notificationsRouter.get('/', asyncHandler(async (req, res) => {
+  res.json(await loadNotifications(req.auth!.legacyId, numberQuery(req.query.page, 1), numberQuery(req.query.limit, 50)));
+}));
+
+export async function loadNotifications(userId: number, page = 1, limit = 50) {
   const result = await listLegacyRecords('notifications', {
-    page: numberQuery(req.query.page, 1),
-    limit: numberQuery(req.query.limit, 50),
-    filters: { user_id: req.auth!.legacyId },
+    page,
+    limit,
+    filters: { user_id: userId },
     sort: 'created_at',
     order: 'desc'
   });
   const unread = result.data.filter((item) => !Number(item.fields.is_read)).length;
-  res.json({ ...result, unread });
-}));
+  return { ...result, unread };
+}
 
 notificationsRouter.patch('/:notificationId/read', asyncHandler(async (req, res) => {
   const id = identifier(req.params.notificationId);

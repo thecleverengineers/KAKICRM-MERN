@@ -19,7 +19,7 @@ import {
 } from '../services/legacyRepository.js';
 import { toPublicRecordWithRelations, toPublicRecordsWithRelations } from '../services/relationLabels.js';
 import { openStoredFile, persistIncomingFile, legacyAssetUrl } from '../services/storage.js';
-import { can, isAdminOrHrRole, isEmployeeRole } from '../services/permissions.js';
+import { can, isAdminOrHrRole, isEmployeeRole, type AuthContext } from '../services/permissions.js';
 import {
   canCreateEmployeeTask,
   employeeCanAccessTask,
@@ -110,13 +110,37 @@ function requireTaskCreateAccess(req: import('express').Request, res: import('ex
   next();
 }
 
+export type TaskListInput = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  priority?: string;
+  dueFrom?: string;
+  dueTo?: string;
+  order?: 'asc' | 'desc';
+};
+
 tasksRouter.get('/', asyncHandler(async (req, res) => {
-  const employeeOnly = isEmployeeRole(req.auth!);
-  const taskScope = employeeOnly ? await taskVisibilityScopeWithRelationships(req.auth!.legacyId) : undefined;
-  const statusFilter = taskListStatusSchema.safeParse(req.query.status);
-  const priorityFilter = taskListPrioritySchema.safeParse(req.query.priority);
-  const dueFromFilter = taskListDateSchema.safeParse(req.query.dueFrom);
-  const dueToFilter = taskListDateSchema.safeParse(req.query.dueTo);
+  res.json(await loadTaskList(req.auth!, {
+    page: numberQuery(req.query.page, 1),
+    limit: numberQuery(req.query.limit, 50),
+    search: typeof req.query.search === 'string' ? req.query.search : undefined,
+    status: typeof req.query.status === 'string' ? req.query.status : undefined,
+    priority: typeof req.query.priority === 'string' ? req.query.priority : undefined,
+    dueFrom: typeof req.query.dueFrom === 'string' ? req.query.dueFrom : undefined,
+    dueTo: typeof req.query.dueTo === 'string' ? req.query.dueTo : undefined,
+    order: req.query.order === 'asc' ? 'asc' : 'desc'
+  }));
+}));
+
+export async function loadTaskList(auth: AuthContext, input: TaskListInput = {}) {
+  const employeeOnly = isEmployeeRole(auth);
+  const taskScope = employeeOnly ? await taskVisibilityScopeWithRelationships(auth.legacyId) : undefined;
+  const statusFilter = taskListStatusSchema.safeParse(input.status);
+  const priorityFilter = taskListPrioritySchema.safeParse(input.priority);
+  const dueFromFilter = taskListDateSchema.safeParse(input.dueFrom);
+  const dueToFilter = taskListDateSchema.safeParse(input.dueTo);
   const activeAllScope = {
     $or: [
       { 'raw.status': { $in: ['in_progress', 'active', 'working_on', 'review', 'in_review', 'pending'] } },
@@ -142,15 +166,15 @@ tasksRouter.get('/', asyncHandler(async (req, res) => {
       ? { $and: [baseListScope, dueDateScope] }
       : dueDateScope
     : baseListScope;
-  const searchTerm = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+  const searchTerm = input.search?.trim() ?? '';
   const matchingAssigneeIds = searchTerm ? await assigneeIdsByName(searchTerm) : [];
   const assigneeValues = matchingAssigneeIds.flatMap((id) => [id, String(id)]);
   const searchAlternatives = assigneeValues.length
     ? taskAssigneeSearchFields.map((field) => ({ [`raw.${field}`]: { $in: assigneeValues } }))
     : [];
   const result = await listLegacyRecords('tasks', {
-    page: numberQuery(req.query.page, 1),
-    limit: numberQuery(req.query.limit, 50),
+    page: input.page ?? 1,
+    limit: input.limit ?? 50,
     search: searchTerm || undefined,
     searchFields: ['title', 'description', 'status', 'priority'],
     searchAlternatives,
@@ -158,18 +182,13 @@ tasksRouter.get('/', asyncHandler(async (req, res) => {
       ...(statusFilter.success ? { status: statusFilter.data } : {}),
       ...(priorityFilter.success ? { priority: priorityFilter.data } : {})
     },
-    // Keep task ordering consistent across pagination and tabs:
-    // Due-date bucket → Priority → Status → nearest exact due date.
-    // The All tab still limits results to active work only.
     sort: statusFilter.success ? TASK_STATUS_TAB_SORT : TASK_ALL_TAB_SORT,
-    order: req.query.order === 'asc' ? 'asc' : 'desc',
-    // Scope before pagination so totals and pages match what the All tab can
-    // actually display. Completed and Blocked stay available in their own tabs.
+    order: input.order ?? 'desc',
     scope: listScope
   });
-  const visible = await Promise.all(result.data.map(async (task) => ({ task, visible: await canSeeTask(req.auth!, task.fields) })));
-  res.json({ ...result, data: visible.filter((item) => item.visible).map((item) => item.task) });
-}));
+  const visible = await Promise.all(result.data.map(async (task) => ({ task, visible: await canSeeTask(auth, task.fields) })));
+  return { ...result, data: visible.filter((item) => item.visible).map((item) => item.task) };
+}
 
 tasksRouter.post('/', requireTaskCreateAccess, asyncHandler(async (req, res) => {
   const input = taskSchema.parse(req.body);

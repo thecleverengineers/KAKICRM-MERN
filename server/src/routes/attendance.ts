@@ -40,7 +40,10 @@ attendanceRouter.use(requireAuth);
 
 attendanceRouter.get('/me', asyncHandler(async (req, res) => {
   const date = typeof req.query.date === 'string' ? req.query.date : todayIst();
-  const userId = req.auth!.legacyId;
+  res.json(await loadAttendanceMe(req.auth!.legacyId, date));
+}));
+
+export async function loadAttendanceMe(userId: number, date = todayIst()) {
   const [shift, breaks, overtime, log] = await Promise.all([
     currentShift(userId, date),
     listRawRecords('attendance_breaks', { 'raw.user_id': userId, 'raw.work_date': date }, 100),
@@ -53,15 +56,15 @@ attendanceRouter.get('/me', asyncHandler(async (req, res) => {
     ? Math.max(0, minutesBetween(String(shift.raw.shift_start_ist), nowIst()) - number(shift.raw.break_minutes) - liveBreakMinutes)
     : number(log[0]?.raw.total_minutes ?? shift?.raw.total_minutes);
   const overtimePolicy = await calculateOvertimeForDate(userId, date, workedMinutes, number(log[0]?.raw.manual_overtime_minutes));
-  res.json({
+  return {
     date,
     shift: shift ? toPublicRecord(shift) : null,
     breaks: breaks.map(toPublicRecord),
     overtime: overtime.map(toPublicRecord),
     log: log[0] ? toPublicRecord(log[0]) : null,
     overtimePolicy
-  });
-}));
+  };
+}
 
 /** Public read-only calendar so employees can see why a date qualifies for
  * holiday overtime. HR/Admin users manage the entries below. */

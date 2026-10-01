@@ -45,26 +45,29 @@ dashboardRouter.use(requireAuth, requireWhatsAppNumber);
 
 dashboardRouter.get('/summary', asyncHandler(async (req, res) => {
   if (!req.auth) throw new HttpError(401, 'Authentication is required.');
+  res.json(await loadDashboardSummary(req.auth));
+}));
 
+export async function loadDashboardSummary(auth: AuthContext) {
   const [myTasks, latestNotifications, myWorkNotes] = await Promise.all([
-    personalTasks(req.auth),
-    listRawRecords('notifications', { 'raw.user_id': req.auth.legacyId }, 8),
-    personalWorkNotes(req.auth.legacyId)
+    personalTasks(auth),
+    listRawRecords('notifications', { 'raw.user_id': auth.legacyId }, 8),
+    personalWorkNotes(auth.legacyId)
   ]);
   const [publicTasks, publicWorkNotes, metrics] = await Promise.all([
     toPublicRecordsWithRelations('tasks', myTasks),
     toPublicRecordsWithRelations('employee_todos', myWorkNotes),
-    dashboardMetrics(req.auth, myTasks)
+    dashboardMetrics(auth, myTasks)
   ]);
 
-  res.json({
+  return {
     metrics,
-    quickActions: quickActionsFor(req.auth),
+    quickActions: quickActionsFor(auth),
     myTasks: publicTasks,
     myWorkNotes: publicWorkNotes,
     notifications: latestNotifications.map(brief)
-  });
-}));
+  };
+}
 
 // Personal work notes are deliberately isolated from assigned project tasks.
 // The signed-in user is always set server-side and can only access their own
