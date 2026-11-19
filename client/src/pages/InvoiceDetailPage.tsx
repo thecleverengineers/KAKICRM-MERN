@@ -46,6 +46,7 @@ export function InvoiceDetailPage() {
   const [deletingDiscount, setDeletingDiscount] = useState(false);
   const [discountDeleteError, setDiscountDeleteError] = useState<string | null>(null);
   const [discountDeleting, setDiscountDeleting] = useState(false);
+  const [editingIssueDate, setEditingIssueDate] = useState(false);
   const [editingNote, setEditingNote] = useState(false);
   const [deletingNote, setDeletingNote] = useState(false);
   const [noteDeleteError, setNoteDeleteError] = useState<string | null>(null);
@@ -152,7 +153,7 @@ export function InvoiceDetailPage() {
   };
 
   return <>
-    <PageHeader eyebrow="INVOICE DETAIL" title={displayValue(invoice.data.fields.invoice_no)} description={`Issued ${date(invoice.data.fields.issue_date)} · ${displayValue(invoice.client?.fields.name)}`} actions={<><button className="button button--secondary" onClick={() => navigate('/invoices')}><ArrowLeft size={17} /> Invoices</button><button className="button button--secondary" onClick={() => window.print()}><Printer size={17} /> Print</button></>} />
+    <PageHeader eyebrow="INVOICE DETAIL" title={displayValue(invoice.data.fields.invoice_no)} description={`Issued ${date(invoice.data.fields.issue_date)} · ${displayValue(invoice.client?.fields.name)}`} actions={<>{canManage && <button className="button button--secondary" type="button" onClick={() => setEditingIssueDate(true)}><Pencil size={17} /> Edit issue date</button>}<button className="button button--secondary" onClick={() => navigate('/invoices')}><ArrowLeft size={17} /> Invoices</button><button className="button button--secondary" onClick={() => window.print()}><Printer size={17} /> Print</button></>} />
     <article className="invoice-paper invoice-paper--premium invoice-paper--a4" style={invoiceStyle}>
       <div className="invoice-template-corner invoice-template-corner--top" aria-hidden="true" />
       <div className="invoice-template-corner invoice-template-corner--bottom" aria-hidden="true" />
@@ -195,6 +196,13 @@ export function InvoiceDetailPage() {
     {deletingPayment && <DeleteInvoicePaymentDialog payment={deletingPayment} deleting={paymentDeleting} error={paymentDeleteError} onClose={() => { if (!paymentDeleting) setDeletingPayment(null); }} onConfirm={() => void deletePayment()} />}
     {editingDiscount && <InvoiceDiscountDialog invoiceId={invoiceId ?? ''} invoice={invoice.data} onClose={() => setEditingDiscount(false)} onSaved={async () => { setEditingDiscount(false); await refresh(); }} />}
     {deletingDiscount && <DeleteInvoiceDiscountDialog discount={discount} deleting={discountDeleting} error={discountDeleteError} onClose={() => { if (!discountDeleting) setDeletingDiscount(false); }} onConfirm={() => void deleteDiscount()} />}
+    {canManage && editingIssueDate && invoiceId && <InvoiceIssueDateDialog key={invoiceId} invoiceId={invoiceId}
+      issueDate={text(invoice.data.fields.issue_date).slice(0, 10)} onClose={() => setEditingIssueDate(false)}
+      onSaved={async (updated) => {
+        queryClient.setQueryData(['invoice', invoiceId], updated);
+        setEditingIssueDate(false);
+        await queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      }} />}
     {editingNote && <InvoiceNoteDialog invoiceId={invoiceId ?? ''} note={invoiceNote} onClose={() => setEditingNote(false)} onSaved={async () => { setEditingNote(false); await refresh(); }} />}
     {deletingNote && <DeleteInvoiceNoteDialog deleting={noteDeleting} error={noteDeleteError} onClose={() => { if (!noteDeleting) setDeletingNote(false); }} onConfirm={() => void deleteNote()} />}
   </>;
@@ -237,6 +245,51 @@ function InvoiceBillingProfileSwitcher({ invoiceId, invoice, currentProfile, onS
   };
 
   return <article className="content-card invoice-billing-profile-card"><div className="card-heading"><div><p className="eyebrow">INVOICE ISSUER</p><h2>Change billing profile</h2></div><FileText size={18} /></div><p className="muted-copy">Change the company profile used by this invoice. The profile itself is not modified; the invoice automatically follows the selected profile’s GST enabled/disabled setting and recalculates its totals.</p>{profilesQuery.isPending ? <p className="muted-copy">Loading billing profiles…</p> : profilesQuery.isError ? <p className="form-error">Could not load billing profiles. Please retry the invoice page.</p> : <form className="invoice-profile-switcher" onSubmit={(event) => void submit(event)}><label className="field"><span>Billing profile</span><select value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setMessage(null); setError(null); }}><option value="">Select billing profile…</option>{profilesQuery.data.data.map((profile) => <option key={profile.id} value={profile.legacyId ?? ''}>{companyProfileName(profile)}</option>)}</select></label><div className="invoice-profile-switcher__details"><strong>{selectedProfile ? companyProfileName(selectedProfile) : 'No profile selected'}</strong><span>{selectedProfile ? `${selectedProfileGstEnabled ? 'GST enabled' : 'GST disabled'} · This profile will control GST in the invoice preview and printed output.` : 'Select an active profile to update this invoice.'}</span></div><button className="button" type="submit" disabled={saving || !selectedId}>{saving ? 'Changing…' : 'Change profile'}</button>{message && <p className="form-success">{message}</p>}{error && <p className="form-error">{error}</p>}</form>}</article>;
+}
+
+function InvoiceIssueDateDialog({ invoiceId, issueDate, onClose, onSaved }: {
+  invoiceId: string;
+  issueDate: string;
+  onClose: () => void;
+  onSaved: (invoice: InvoiceDetail) => Promise<void>;
+}) {
+  const [value, setValue] = useState(issueDate);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await api<InvoiceDetail>(`/billing/invoices/${invoiceId}/issue-date`, {
+        method: 'PATCH',
+        body: JSON.stringify({ issue_date: value })
+      });
+      await onSaved(updated);
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : 'The issue date could not be saved.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <div className="modal-backdrop" role="presentation" onMouseDown={saving ? undefined : onClose}>
+    <section className="modal invoice-note-modal" role="dialog" aria-modal="true" aria-label="Edit issue date" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="modal-header"><h2>Edit issue date</h2></div>
+      <form onSubmit={(event) => void submit(event)}>
+        <label className="field">
+          <span>Issue date</span>
+          <input type="date" value={value} onChange={(event) => setValue(event.target.value)} required autoFocus disabled={saving} />
+        </label>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <div className="modal-actions">
+          <button className="button button--secondary" type="button" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="button" disabled={saving || value === issueDate}><Save size={16} /> {saving ? 'Saving…' : 'Save issue date'}</button>
+        </div>
+      </form>
+    </section>
+  </div>;
 }
 
 function InvoiceNoteDialog({ invoiceId, note, onClose, onSaved }: { invoiceId: string; note: string; onClose: () => void; onSaved: () => Promise<void> }) {

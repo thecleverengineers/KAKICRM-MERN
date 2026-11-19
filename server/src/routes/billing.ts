@@ -344,6 +344,19 @@ billingRouter.delete('/invoices/:invoiceId/note', requireInvoiceNoteManage, asyn
   res.status(204).send();
 }));
 
+billingRouter.patch('/invoices/:invoiceId/issue-date', requirePermission('billing.manage'), asyncHandler(async (req, res) => {
+  const id = invoiceId(req.params.invoiceId);
+  const issueDate = invoiceExportDate(req.body?.issue_date, 'Issue date');
+  const parsedDate = new Date(issueDate ?? '');
+  if (!issueDate || !Number.isFinite(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== issueDate || issueDate.startsWith('0000-')) {
+    throw new HttpError(400, 'Enter a valid issue date.');
+  }
+
+  const updated = await updateLegacyRecord('invoices', id, { issue_date: issueDate, updated_at: nowIst() });
+  if (!updated) throw new HttpError(404, 'Invoice not found.');
+  res.json(await invoiceDetail(id));
+}));
+
 billingRouter.patch('/invoices/:invoiceId/status', requirePermission('billing.manage'), asyncHandler(async (req, res) => {
   const input = z.object({ status: z.enum(['draft', 'sent', 'partial', 'paid', 'overdue', 'cancelled']) }).parse(req.body);
   const invoice = await updateLegacyRecord('invoices', invoiceId(req.params.invoiceId), { status: input.status, status_is_manual: 1, updated_at: nowIst() });
