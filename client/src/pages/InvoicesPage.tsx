@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileDown, LoaderCircle, Plus, Search, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DataTable } from '../components/DataTable.js';
@@ -28,6 +28,7 @@ export function InvoicesPage() {
   const [open, setOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportMode, setExportMode] = useState<'all' | 'filtered' | null>(null);
+  const [status, setStatus] = useState('');
   const [exportFromDate, setExportFromDate] = useState('');
   const [exportToDate, setExportToDate] = useState('');
   const [exportError, setExportError] = useState<string | null>(null);
@@ -38,12 +39,18 @@ export function InvoicesPage() {
     next.delete('new');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
-  const query = useQuery({ queryKey: ['invoices', page, search], queryFn: () => api<Paginated<PublicRecord>>(`/billing/invoices${queryString({ page, limit: 50, search })}`) });
+  const invalidDates = Boolean(exportFromDate && exportToDate && exportFromDate > exportToDate);
+  const filters = { status, from_date: exportFromDate, to_date: invalidDates ? '' : exportToDate };
+  const query = useQuery({
+    queryKey: ['invoices', page, search, filters],
+    placeholderData: keepPreviousData,
+    queryFn: () => api<Paginated<PublicRecord>>(`/billing/invoices${queryString({ page, limit: 50, search, ...filters })}`)
+  });
   const suggestionsQuery = useQuery({
-    queryKey: ['invoice-search-suggestions', suggestionSearch],
-    enabled: suggestionSearch.length > 0 && suggestionSearch === searchInput.trim(),
+    queryKey: ['invoice-search-suggestions', suggestionSearch, filters],
+    enabled: suggestionSearch.length > 0 && suggestionSearch.length <= 200 && suggestionSearch === searchInput.trim(),
     staleTime: 30_000,
-    queryFn: () => api<Paginated<PublicRecord>>(`/billing/invoices${queryString({ page: 1, limit: 6, search: suggestionSearch })}`)
+    queryFn: () => api<Paginated<PublicRecord>>(`/billing/invoices${queryString({ page: 1, limit: 6, search: suggestionSearch, ...filters })}`)
   });
   if (query.isPending) return <LoadingState label="Loading invoices…" />;
   if (query.isError) return <ErrorState message={query.error.message} onRetry={() => void query.refetch()} />;
@@ -58,7 +65,7 @@ export function InvoicesPage() {
     setExportError(null);
     try {
       const token = getAccessToken();
-      const response = await fetch(apiUrl(`/billing/invoices/export${queryString({ search: mode === 'filtered' ? search : undefined, export_scope: mode, from_date: exportFromDate, to_date: exportToDate })}`), {
+      const response = await fetch(apiUrl(`/billing/invoices/export${queryString({ search: mode === 'filtered' ? search : undefined, status: mode === 'filtered' ? status : undefined, export_scope: mode, from_date: exportFromDate, to_date: exportToDate })}`), {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined
       });
       if (!response.ok) {
@@ -88,7 +95,7 @@ export function InvoicesPage() {
     <div className="toolbar invoice-toolbar"><SearchAutocomplete
       className="search-autocomplete--invoice"
       value={searchInput}
-      onChange={setSearchInput}
+      onChange={(value) => { setSearchInput(value.slice(0, 200)); if (!value.trim()) { setSearch(''); setPage(1); } }}
       onSubmit={() => { setSearch(searchInput.trim()); setPage(1); }}
       suggestions={suggestionsQuery.data?.data ?? []}
       getKey={(invoice) => invoice.id}
@@ -97,8 +104,16 @@ export function InvoicesPage() {
       onSelect={(invoice) => { if (invoice.legacyId) navigate(`/invoices/${invoice.legacyId}`); }}
       loading={searchInput.trim().length > 0 && (suggestionSearch !== searchInput.trim() || suggestionsQuery.isFetching || suggestionsQuery.isPending)}
       error={suggestionsQuery.isError}
-      placeholder="Search invoice number, client or status…"
-    /><div className="invoice-export-controls"><label><span>From</span><input type="date" value={exportFromDate} onChange={(event) => setExportFromDate(event.target.value)} /></label><label><span>To</span><input type="date" value={exportToDate} onChange={(event) => setExportToDate(event.target.value)} /></label><button className="button button--secondary button--compact" type="button" onClick={() => void exportInvoices('all')} disabled={exporting} title="Export every invoice in the selected date range">{exporting && exportMode === 'all' ? <LoaderCircle size={15} className="spin" /> : <FileDown size={15} />} {exporting && exportMode === 'all' ? 'Preparing…' : 'Export all'}</button><button className="button button--secondary button--compact" type="button" onClick={() => void exportInvoices('filtered')} disabled={exporting} title="Export invoices matching the search and selected date range">{exporting && exportMode === 'filtered' ? <LoaderCircle size={15} className="spin" /> : <FileDown size={15} />} {exporting && exportMode === 'filtered' ? 'Preparing…' : 'Export filtered'}</button><span>{query.data.pagination.total} invoices</span></div></div>
+      placeholder="Search invoice number or client name…"
+    /><div className="invoice-export-controls">
+      <label><span>Status</span><select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}>
+        <option value="">All statuses</option>
+        {['Draft', 'Sent', 'Partial', 'Paid', 'Overdue', 'Cancelled'].map((label) => <option key={label} value={label.toLowerCase()}>{label}</option>)}
+      </select></label>
+      <label><span>Issue date from</span><input type="date" value={exportFromDate} onChange={(event) => { setExportFromDate(event.target.value); setPage(1); }} /></label><label><span>Issue date to</span><input type="date" value={exportToDate} onChange={(event) => { setExportToDate(event.target.value); setPage(1); }} /></label><button className="button button--secondary button--compact" type="button" onClick={() => void exportInvoices('all')} disabled={exporting} title="Export every invoice in the selected date range">{exporting && exportMode === 'all' ? <LoaderCircle size={15} className="spin" /> : <FileDown size={15} />} {exporting && exportMode === 'all' ? 'Preparing…' : 'Export all'}</button><button className="button button--secondary button--compact" type="button" onClick={() => void exportInvoices('filtered')} disabled={exporting} title="Export invoices matching the search and selected date range">{exporting && exportMode === 'filtered' ? <LoaderCircle size={15} className="spin" /> : <FileDown size={15} />} {exporting && exportMode === 'filtered' ? 'Preparing…' : 'Export filtered'}</button>{(searchInput || search || status || exportFromDate || exportToDate) && <button className="button button--secondary button--compact" type="button" onClick={() => {
+      setSearchInput(''); setSearch(''); setStatus(''); setExportFromDate(''); setExportToDate(''); setExportError(null); setPage(1);
+    }}>Clear filters</button>}<span aria-live="polite">{query.isFetching ? 'Updating invoices…' : `${query.data.pagination.total} invoices`}</span></div></div>
+    {invalidDates && <p className="form-error">From date cannot be later than To date.</p>}
     {exportError && <p className="form-error">{exportError}</p>}
     <DataTable records={query.data.data} columns={invoiceResource.columns} resource={invoiceResource} page={query.data.pagination.page} pages={query.data.pagination.pages} total={query.data.pagination.total} onPageChange={setPage} onOpen={(record) => navigate(`/invoices/${record.legacyId}`)} clickableRows />
     {canCreateInvoice && <CreateInvoiceDialog open={open} onClose={() => setOpen(false)} onCreated={async () => { await queryClient.invalidateQueries({ queryKey: ['invoices'] }); }} />}

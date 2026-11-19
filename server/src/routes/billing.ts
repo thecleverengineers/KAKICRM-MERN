@@ -3,7 +3,7 @@ import ExcelJS from 'exceljs';
 import multer from 'multer';
 import type { FilterQuery } from 'mongoose';
 import { z } from 'zod';
-import { toPublicRecord, type LegacyRecord } from '../db/legacy.js';
+import { getLegacyModel, toPublicRecord, type LegacyRecord } from '../db/legacy.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/rbac.js';
 import {
@@ -19,6 +19,7 @@ import { persistIncomingFile, storedAssetUrl } from '../services/storage.js';
 import { canManageInvoiceSettlement, canViewInvoices, isAdminOrHrRole, isCeoRole } from '../services/permissions.js';
 
 const profileImageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
+const invoiceStatuses = ['draft', 'sent', 'partial', 'paid', 'overdue', 'cancelled'] as const;
 const invoiceSearchFields = ['invoice_no', 'status', 'remarks', 'notes'];
 const MAX_INVOICE_EXPORT_ROWS = 25_000;
 
@@ -123,12 +124,38 @@ billingRouter.post('/profiles/:profileId/qr-secondary', requirePermission('billi
   res.status(201).json({ data: toPublicRecord(updated) });
 }));
 
+async function invoiceListFilters(query: Request['query']) {
+  const search = typeof query.search === 'string' ? query.search.trim() : '';
+  if (search.length > 200) throw new HttpError(400, 'Search must be 200 characters or fewer.');
+  const filters = { status: z.enum(invoiceStatuses).optional().parse(query.status || undefined) ?? '' };
+  const fromDate = invoiceExportDate(query.from_date, 'From date');
+  const toDate = invoiceExportDate(query.to_date, 'To date');
+  if (fromDate && toDate && fromDate > toDate) throw new HttpError(400, 'From date cannot be later than To date.');
+
+  const issueDateFilter: Record<string, string> = {};
+  if (fromDate) issueDateFilter.$gte = fromDate;
+  if (toDate) issueDateFilter.$lte = toDate + '\uffff';
+  const scope: FilterQuery<LegacyRecord> | undefined = fromDate || toDate
+    ? { 'raw.issue_date': issueDateFilter }
+    : undefined;
+  const searchAlternatives: FilterQuery<LegacyRecord>[] = [];
+  if (search) {
+    const expression = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const clientIds = await getLegacyModel('clients').distinct('legacyId', {
+      $or: [{ 'raw.name': expression }, { 'raw.company': expression }]
+    });
+    if (clientIds.length) {
+      searchAlternatives.push({ 'raw.client_id': { $in: [...clientIds, ...clientIds.map(String)] } });
+    }
+  }
+  return { search, searchFields: invoiceSearchFields, searchAlternatives, filters, scope };
+}
+
 billingRouter.get('/invoices', requireInvoiceView, asyncHandler(async (req, res) => {
   const result = await listLegacyRecords('invoices', {
+    ...await invoiceListFilters(req.query),
     page: positive(req.query.page, 1),
     limit: positive(req.query.limit, 50),
-    search: typeof req.query.search === 'string' ? req.query.search : undefined,
-    searchFields: invoiceSearchFields,
     sort: typeof req.query.sort === 'string' ? req.query.sort : 'issue_date',
     order: req.query.order === 'asc' ? 'asc' : 'desc'
   });
@@ -136,25 +163,16 @@ billingRouter.get('/invoices', requireInvoiceView, asyncHandler(async (req, res)
 }));
 
 billingRouter.get('/invoices/export', requireInvoiceView, asyncHandler(async (req, res) => {
-  const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
   const exportScope = req.query.export_scope === 'filtered' ? 'filtered' : 'all';
+  const options = await invoiceListFilters(req.query);
   const fromDate = invoiceExportDate(req.query.from_date, 'From date');
   const toDate = invoiceExportDate(req.query.to_date, 'To date');
-  if (fromDate && toDate && fromDate > toDate) throw new HttpError(400, 'From date cannot be later than To date.');
-  const issueDateFilter: Record<string, string> = {};
-  if (fromDate) issueDateFilter.$gte = fromDate;
-  if (toDate) issueDateFilter.$lte = toDate;
-  const scope: FilterQuery<LegacyRecord> | undefined = Object.keys(issueDateFilter).length
-    ? { 'raw.issue_date': issueDateFilter }
-    : undefined;
   const firstPage = await listLegacyRecords('invoices', {
     page: 1,
     limit: 100,
-    search: search || undefined,
-    searchFields: invoiceSearchFields,
+    ...options,
     sort: 'issue_date',
-    order: 'desc',
-    scope
+    order: 'desc'
   });
   if (firstPage.pagination.total > MAX_INVOICE_EXPORT_ROWS) {
     throw new HttpError(413, `Export is limited to ${MAX_INVOICE_EXPORT_ROWS.toLocaleString()} invoices. Refine the search and try again.`);
@@ -165,11 +183,9 @@ billingRouter.get('/invoices/export', requireInvoiceView, asyncHandler(async (re
     const result = await listLegacyRecords('invoices', {
       page,
       limit: 100,
-      search: search || undefined,
-      searchFields: invoiceSearchFields,
+      ...options,
       sort: 'issue_date',
-      order: 'desc',
-      scope
+      order: 'desc'
     });
     records.push(...result.data);
   }
@@ -358,7 +374,7 @@ billingRouter.patch('/invoices/:invoiceId/issue-date', requirePermission('billin
 }));
 
 billingRouter.patch('/invoices/:invoiceId/status', requirePermission('billing.manage'), asyncHandler(async (req, res) => {
-  const input = z.object({ status: z.enum(['draft', 'sent', 'partial', 'paid', 'overdue', 'cancelled']) }).parse(req.body);
+  const input = z.object({ status: z.enum(invoiceStatuses) }).parse(req.body);
   const invoice = await updateLegacyRecord('invoices', invoiceId(req.params.invoiceId), { status: input.status, status_is_manual: 1, updated_at: nowIst() });
   if (!invoice) throw new HttpError(404, 'Invoice not found.');
   res.json({ data: toPublicRecord(invoice) });
