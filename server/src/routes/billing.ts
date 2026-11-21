@@ -373,6 +373,14 @@ billingRouter.patch('/invoices/:invoiceId/issue-date', requirePermission('billin
   res.json(await invoiceDetail(id));
 }));
 
+billingRouter.patch('/invoices/:invoiceId/due-date', requirePermission('billing.manage'), asyncHandler(async (req, res) => {
+  const id = invoiceId(req.params.invoiceId);
+  const { due_date } = z.object({ due_date: z.string().date().refine((date) => !date.startsWith('0000-')).nullable() }).parse(req.body);
+  const updated = await updateLegacyRecord('invoices', id, { due_date, updated_at: nowIst() });
+  if (!updated) throw new HttpError(404, 'Invoice not found.');
+  res.json(await invoiceDetail(id));
+}));
+
 billingRouter.patch('/invoices/:invoiceId/status', requirePermission('billing.manage'), asyncHandler(async (req, res) => {
   const input = z.object({ status: z.enum(invoiceStatuses) }).parse(req.body);
   const invoice = await updateLegacyRecord('invoices', invoiceId(req.params.invoiceId), { status: input.status, status_is_manual: 1, updated_at: nowIst() });
