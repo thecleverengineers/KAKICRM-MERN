@@ -124,10 +124,25 @@ billingRouter.post('/profiles/:profileId/qr-secondary', requirePermission('billi
   res.status(201).json({ data: toPublicRecord(updated) });
 }));
 
+billingRouter.get('/invoices/billing-profiles', requireInvoiceView, asyncHandler(async (_req, res) => {
+  const profiles = await getLegacyModel('billing_profiles')
+    .find({ archivedAt: { $exists: false }, legacyId: { $gt: 0 } })
+    .select({ legacyId: 1, 'raw.legal_name': 1, 'raw.business_name': 1, 'raw.brand_name': 1, 'raw.code': 1 })
+    .lean<LegacyRecord[]>();
+  const data = profiles.map(({ legacyId, raw }) => ({
+    id: legacyId,
+    label: String(raw.legal_name || raw.business_name || raw.brand_name || raw.code || `Company profile #${legacyId}`)
+  }));
+  data.sort((left, right) => left.label.localeCompare(right.label));
+  res.json({ data });
+}));
+
 async function invoiceListFilters(query: Request['query']) {
   const search = typeof query.search === 'string' ? query.search.trim() : '';
   if (search.length > 200) throw new HttpError(400, 'Search must be 200 characters or fewer.');
   const filters = { status: z.enum(invoiceStatuses).optional().parse(query.status || undefined) ?? '' };
+  const profileValue = z.string().regex(/^\d+$/).optional().parse(query.billing_profile_id === '' ? undefined : query.billing_profile_id);
+  const profileId = profileValue === undefined ? undefined : billingProfileId(profileValue);
   const fromDate = invoiceExportDate(query.from_date, 'From date');
   const toDate = invoiceExportDate(query.to_date, 'To date');
   if (fromDate && toDate && fromDate > toDate) throw new HttpError(400, 'From date cannot be later than To date.');
@@ -135,9 +150,9 @@ async function invoiceListFilters(query: Request['query']) {
   const issueDateFilter: Record<string, string> = {};
   if (fromDate) issueDateFilter.$gte = fromDate;
   if (toDate) issueDateFilter.$lte = toDate + '\uffff';
-  const scope: FilterQuery<LegacyRecord> | undefined = fromDate || toDate
-    ? { 'raw.issue_date': issueDateFilter }
-    : undefined;
+  const scope: FilterQuery<LegacyRecord> = {};
+  if (fromDate || toDate) scope['raw.issue_date'] = issueDateFilter;
+  if (profileId !== undefined) scope['raw.billing_profile_id'] = { $in: [profileId, String(profileId)] };
   const searchAlternatives: FilterQuery<LegacyRecord>[] = [];
   if (search) {
     const expression = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
